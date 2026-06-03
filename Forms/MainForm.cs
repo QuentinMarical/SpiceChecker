@@ -378,6 +378,8 @@ namespace SpiceChecker
 
         private void ApplyCurrentTheme()
         {
+            bool isFluent = _currentTheme.Id is ThemeId.Fluent11Light or ThemeId.Fluent11Dark;
+
             EnsureCustomTitleBar();
             _titleBar.ApplyTheme(_currentTheme);
             ThemeApplier.Apply(this, _currentTheme, _grid, _toolbarPanel, _filterPanelHost, _toolbar);
@@ -387,7 +389,42 @@ namespace SpiceChecker
                 : new Padding(1);
 
             EnsureTopDockOrder();
+            ApplyFluentEffect();
             Invalidate();
+        }
+
+        private void ApplyFluentEffect()
+        {
+            if (!IsHandleCreated) return;
+
+            bool isFluent = _currentTheme.Id is ThemeId.Fluent11Light or ThemeId.Fluent11Dark;
+
+            if (isFluent)
+            {
+                // Rétablir la title bar native Windows
+                FormBorderStyle = FormBorderStyle.Sizable;
+
+                // Masquer CustomTitleBar
+                if (_titleBar != null) _titleBar.Visible = false;
+
+                // Dark mode sur la title bar native
+                DwmHelper.SetDarkTitleBar(Handle, _currentTheme.Id == ThemeId.Fluent11Dark);
+
+                // Mica > Mica legacy > Acrylic legacy
+                DwmHelper.ApplyBestEffect(Handle, BackdropEffect.Mica, _currentTheme.BackdropFallbackTint);
+
+                // Fond compatible Mica
+                BackColor = _currentTheme.Id == ThemeId.Fluent11Dark
+                    ? Color.FromArgb(32, 32, 32)
+                    : Color.FromArgb(243, 243, 243);
+            }
+            else
+            {
+                // Retour à CustomTitleBar pour les autres thèmes
+                FormBorderStyle = FormBorderStyle.None;
+                if (_titleBar != null) _titleBar.Visible = true;
+                DwmHelper.DisableBackdrop(Handle);
+            }
         }
 
         private void ConfigureColumns()
@@ -511,7 +548,7 @@ namespace SpiceChecker
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            DwmHelper.SetTitleBarDarkMode(Handle, _currentTheme.IsDark);
+            ApplyFluentEffect();
         }
 
         // ==================================================================

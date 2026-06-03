@@ -12,7 +12,9 @@ namespace SpiceChecker.Services
         {
             form.BackColor = theme.FormBackground;
             form.Font = theme.BaseFont;
-            form.FormBorderStyle = FormBorderStyle.None;
+            bool isFluent = theme.Id is ThemeId.Fluent11Light or ThemeId.Fluent11Dark;
+            if (!isFluent)
+                form.FormBorderStyle = FormBorderStyle.None;
 
             toolbarPanel.BackColor = theme.ToolbarBackground;
 
