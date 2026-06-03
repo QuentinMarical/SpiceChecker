@@ -29,6 +29,7 @@ namespace SpiceChecker
         private ToolStripButton _btnOpen = null!, _btnExport = null!, _btnExportXlsx = null!, _btnPrint = null!, _btnCopy = null!, _btnAbout = null!;
         private ToolStripLabel _lblSource = null!, _lblTheme = null!;
         private ToolStripComboBox _cbTheme = null!;
+        private SettingsService.AppSettings _settings = SettingsService.Load();
         private static AppTheme _savedTheme = AppTheme.FluentLight;
 
         // Filtres
@@ -39,6 +40,8 @@ namespace SpiceChecker
         private Label _lblCount = null!;
 
         // Grille + statut
+        private Panel _titleBarPanel = null!;
+        public Panel TitleBarPanel => _titleBarPanel;
         private DataGridView _grid = null!;
         private StatusStrip _status = null!;
         private ToolStripStatusLabel _statusLabel = null!;
@@ -56,7 +59,15 @@ namespace SpiceChecker
             BuildUi();
             WireEvents();
             UpdateCount();
-            ThemeManager.Apply(AppTheme.FluentLight, this);
+
+            var initialTheme = ThemeManager.ParseThemeName(_settings.LastTheme);
+            ThemeManager.Apply(initialTheme, this);
+            _savedTheme = initialTheme;
+            var themeIndex = (int)initialTheme;
+            if (_cbTheme.SelectedIndex != themeIndex)
+            {
+                _cbTheme.SelectedIndex = themeIndex;
+            }
         }
 
         private void ConfigureMainForm()
@@ -75,6 +86,7 @@ namespace SpiceChecker
         {
             // Toolbar
             _toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
+            _titleBarPanel = new Panel { Dock = DockStyle.Top, Height = 0, Visible = false };
             _btnOpen = new ToolStripButton("Ouvrir XLSX...");
             _btnExport = new ToolStripButton("Export CSV") { Enabled = false };
             _btnExportXlsx = new ToolStripButton("Export XLSX") { Enabled = false };
@@ -274,6 +286,7 @@ namespace SpiceChecker
             Controls.Add(_filterPanel);
             Controls.Add(_toolbar);
             Controls.Add(_status);
+            Controls.Add(_titleBarPanel);
         }
 
         private void ConfigureColumns()
@@ -359,6 +372,8 @@ namespace SpiceChecker
 
                 ThemeManager.Apply(selectedTheme, this);
                 _savedTheme = selectedTheme;
+                _settings.LastTheme = selectedTheme.ToString();
+                SettingsService.Save(_settings);
             };
 
             _grid.CellFormatting += Grid_CellFormatting;

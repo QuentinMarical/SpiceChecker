@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using SpiceChecker;
 
 namespace SpiceChecker.Services
 {
@@ -52,9 +53,33 @@ namespace SpiceChecker.Services
             float FontSize,
             int HeaderHeight,
             int RowHeight,
+            FormBorderStyle BorderStyle,
+            Padding FormPadding,
+            bool UseFakeTitleBarPanel,
+            int FakeTitleBarHeight,
+            bool Use3DBorders,
+            FlatStyle ButtonFlatStyle,
+            int ButtonBorderSize,
+            bool UseSystemToolStripRenderer,
+            DataGridViewCellBorderStyle GridCellBorderStyle,
             bool DarkInputs,
             bool FluentPadding,
             bool LegacyButtonSystemStyle);
+
+        public static AppTheme ParseThemeName(string name)
+        {
+            return name switch
+            {
+                nameof(AppTheme.Legacy95) => AppTheme.Legacy95,
+                nameof(AppTheme.LunaXP) => AppTheme.LunaXP,
+                nameof(AppTheme.AeroSeven) => AppTheme.AeroSeven,
+                nameof(AppTheme.ModernLight) => AppTheme.ModernLight,
+                nameof(AppTheme.ModernDark) => AppTheme.ModernDark,
+                nameof(AppTheme.FluentLight) => AppTheme.FluentLight,
+                nameof(AppTheme.FluentDark) => AppTheme.FluentDark,
+                _ => AppTheme.FluentLight
+            };
+        }
 
         public static void Apply(AppTheme theme, Form form)
         {
@@ -73,9 +98,10 @@ namespace SpiceChecker.Services
             form.BackColor = colors.FormBack;
             form.ForeColor = colors.WindowFore;
             form.Font = new Font(colors.FontName, colors.FontSize, FontStyle.Regular);
-            form.FormBorderStyle = theme == AppTheme.AeroSeven ? FormBorderStyle.FixedSingle : FormBorderStyle.Sizable;
+            form.FormBorderStyle = colors.BorderStyle;
+            form.Padding = colors.FormPadding;
 
-            ApplyAeroGlassPanel(form, theme, colors);
+            ApplyTitleBarPanel(form, theme, colors);
 
             foreach (Control control in form.Controls)
             {
@@ -111,7 +137,7 @@ namespace SpiceChecker.Services
                 grid.DefaultCellStyle.Font = new Font(colors.FontName, colors.FontSize, FontStyle.Regular);
                 grid.BackgroundColor = colors.GridBack;
                 grid.BorderStyle = BorderStyle.None;
-                grid.CellBorderStyle = Current == AppTheme.Legacy95 ? DataGridViewCellBorderStyle.Single : DataGridViewCellBorderStyle.SingleHorizontal;
+                grid.CellBorderStyle = colors.GridCellBorderStyle;
             }
             else if (c is StatusStrip status)
             {
@@ -126,44 +152,41 @@ namespace SpiceChecker.Services
                 strip.BackColor = colors.ToolbarBack;
                 strip.ForeColor = colors.ToolbarFore;
                 strip.Font = new Font(colors.FontName, colors.FontSize, FontStyle.Regular);
-
-                if (Current == AppTheme.Legacy95)
-                {
-                    strip.Renderer = new ToolStripSystemRenderer();
-                }
-                else if (Current == AppTheme.LunaXP)
-                {
-                    strip.Renderer = new ToolStripProfessionalRenderer(new XpColorTable());
-                }
-                else
-                {
-                    strip.Renderer = new ToolStripProfessionalRenderer(new NeutralColorTable(colors));
-                }
+                strip.Renderer = colors.UseSystemToolStripRenderer
+                    ? new ToolStripSystemRenderer()
+                    : (Current == AppTheme.LunaXP
+                        ? new ToolStripProfessionalRenderer(new XpColorTable())
+                        : new ToolStripProfessionalRenderer(new NeutralColorTable(colors)));
             }
             else if (c is Button button)
             {
-                button.UseVisualStyleBackColor = !colors.LegacyButtonSystemStyle;
-                button.BackColor = colors.ButtonFace;
-                button.ForeColor = colors.WindowFore;
-                button.FlatStyle = Current == AppTheme.ModernLight || Current == AppTheme.ModernDark || Current == AppTheme.FluentLight || Current == AppTheme.FluentDark
-                    ? FlatStyle.Flat
-                    : FlatStyle.Standard;
-
-                if (button.FlatStyle == FlatStyle.Flat)
-                {
-                    button.FlatAppearance.BorderColor = colors.ToolbarBorder;
-                    button.FlatAppearance.MouseOverBackColor = Current == AppTheme.ModernLight ? Color.FromArgb(199, 199, 199) : colors.SelectionBack;
-                }
+                ApplyToButton(button, colors);
             }
-            else if (c is TextBox || c is ComboBox || c is CheckBox)
+            else if (c is TextBoxBase textBox)
             {
-                c.BackColor = colors.DarkInputs ? Color.FromArgb(43, 43, 43) : colors.WindowBack;
-                c.ForeColor = colors.DarkInputs ? Color.White : colors.WindowFore;
-
-                if (Current == AppTheme.Legacy95 && c is ButtonBase baseButton)
+                if (colors.Use3DBorders)
                 {
-                    baseButton.UseVisualStyleBackColor = false;
+                    textBox.BorderStyle = BorderStyle.Fixed3D;
                 }
+                else
+                {
+                    textBox.BorderStyle = BorderStyle.FixedSingle;
+                }
+
+                textBox.BackColor = colors.DarkInputs ? Color.FromArgb(43, 43, 43) : colors.WindowBack;
+                textBox.ForeColor = colors.DarkInputs ? Color.White : colors.WindowFore;
+            }
+            else if (c is ComboBox comboBox)
+            {
+                comboBox.FlatStyle = colors.Use3DBorders ? FlatStyle.Standard : FlatStyle.Flat;
+                comboBox.BackColor = colors.DarkInputs ? Color.FromArgb(43, 43, 43) : colors.WindowBack;
+                comboBox.ForeColor = colors.DarkInputs ? Color.White : colors.WindowFore;
+            }
+            else if (c is CheckBox checkBox)
+            {
+                checkBox.FlatStyle = colors.Use3DBorders ? FlatStyle.Standard : FlatStyle.Flat;
+                checkBox.BackColor = colors.DarkInputs ? Color.FromArgb(43, 43, 43) : colors.FormBack;
+                checkBox.ForeColor = colors.DarkInputs ? Color.White : colors.WindowFore;
             }
             else if (c is Label)
             {
@@ -179,6 +202,11 @@ namespace SpiceChecker.Services
             {
                 c.BackColor = colors.FormBack;
                 c.ForeColor = colors.WindowFore;
+            }
+
+            if (c is MainForm mainForm)
+            {
+                ConfigureTitleBarPanel(mainForm, colors);
             }
 
             foreach (Control child in c.Controls)
@@ -217,8 +245,17 @@ namespace SpiceChecker.Services
                     SelectionFore: Color.FromArgb(255, 255, 255),
                     FontName: GetLegacyFontName(),
                     FontSize: 8f,
-                    HeaderHeight: 24,
+                    HeaderHeight: 22,
                     RowHeight: 18,
+                    BorderStyle: FormBorderStyle.Fixed3D,
+                    FormPadding: new Padding(0),
+                    UseFakeTitleBarPanel: false,
+                    FakeTitleBarHeight: 0,
+                    Use3DBorders: true,
+                    ButtonFlatStyle: FlatStyle.Standard,
+                    ButtonBorderSize: 1,
+                    UseSystemToolStripRenderer: true,
+                    GridCellBorderStyle: DataGridViewCellBorderStyle.Single,
                     DarkInputs: false,
                     FluentPadding: false,
                     LegacyButtonSystemStyle: true),
@@ -249,8 +286,17 @@ namespace SpiceChecker.Services
                     SelectionFore: Color.FromArgb(255, 255, 255),
                     FontName: "Tahoma",
                     FontSize: 8f,
-                    HeaderHeight: 24,
-                    RowHeight: 20,
+                    HeaderHeight: 23,
+                    RowHeight: 19,
+                    BorderStyle: FormBorderStyle.FixedSingle,
+                    FormPadding: new Padding(0),
+                    UseFakeTitleBarPanel: false,
+                    FakeTitleBarHeight: 0,
+                    Use3DBorders: false,
+                    ButtonFlatStyle: FlatStyle.Standard,
+                    ButtonBorderSize: 1,
+                    UseSystemToolStripRenderer: false,
+                    GridCellBorderStyle: DataGridViewCellBorderStyle.SingleHorizontal,
                     DarkInputs: false,
                     FluentPadding: false,
                     LegacyButtonSystemStyle: false),
@@ -281,8 +327,17 @@ namespace SpiceChecker.Services
                     SelectionFore: Color.FromArgb(255, 255, 255),
                     FontName: "Segoe UI",
                     FontSize: 9f,
-                    HeaderHeight: 26,
+                    HeaderHeight: 24,
                     RowHeight: 20,
+                    BorderStyle: FormBorderStyle.FixedSingle,
+                    FormPadding: new Padding(0, 0, 0, 0),
+                    UseFakeTitleBarPanel: true,
+                    FakeTitleBarHeight: 28,
+                    Use3DBorders: false,
+                    ButtonFlatStyle: FlatStyle.Standard,
+                    ButtonBorderSize: 1,
+                    UseSystemToolStripRenderer: false,
+                    GridCellBorderStyle: DataGridViewCellBorderStyle.SingleHorizontal,
                     DarkInputs: false,
                     FluentPadding: false,
                     LegacyButtonSystemStyle: false),
@@ -313,8 +368,17 @@ namespace SpiceChecker.Services
                     SelectionFore: Color.FromArgb(0, 0, 0),
                     FontName: "Segoe UI",
                     FontSize: 9f,
-                    HeaderHeight: 26,
-                    RowHeight: 20,
+                    HeaderHeight: 25,
+                    RowHeight: 22,
+                    BorderStyle: FormBorderStyle.FixedSingle,
+                    FormPadding: new Padding(0),
+                    UseFakeTitleBarPanel: false,
+                    FakeTitleBarHeight: 0,
+                    Use3DBorders: false,
+                    ButtonFlatStyle: FlatStyle.Flat,
+                    ButtonBorderSize: 0,
+                    UseSystemToolStripRenderer: false,
+                    GridCellBorderStyle: DataGridViewCellBorderStyle.SingleHorizontal,
                     DarkInputs: false,
                     FluentPadding: false,
                     LegacyButtonSystemStyle: false),
@@ -345,8 +409,17 @@ namespace SpiceChecker.Services
                     SelectionFore: Color.FromArgb(255, 255, 255),
                     FontName: "Segoe UI",
                     FontSize: 9f,
-                    HeaderHeight: 26,
-                    RowHeight: 20,
+                    HeaderHeight: 25,
+                    RowHeight: 22,
+                    BorderStyle: FormBorderStyle.FixedSingle,
+                    FormPadding: new Padding(0),
+                    UseFakeTitleBarPanel: false,
+                    FakeTitleBarHeight: 0,
+                    Use3DBorders: false,
+                    ButtonFlatStyle: FlatStyle.Flat,
+                    ButtonBorderSize: 0,
+                    UseSystemToolStripRenderer: false,
+                    GridCellBorderStyle: DataGridViewCellBorderStyle.SingleHorizontal,
                     DarkInputs: true,
                     FluentPadding: false,
                     LegacyButtonSystemStyle: false),
@@ -379,6 +452,15 @@ namespace SpiceChecker.Services
                     FontSize: 9f,
                     HeaderHeight: 32,
                     RowHeight: 28,
+                    BorderStyle: FormBorderStyle.FixedSingle,
+                    FormPadding: new Padding(0, 8, 0, 0),
+                    UseFakeTitleBarPanel: true,
+                    FakeTitleBarHeight: 32,
+                    Use3DBorders: false,
+                    ButtonFlatStyle: FlatStyle.Flat,
+                    ButtonBorderSize: 0,
+                    UseSystemToolStripRenderer: false,
+                    GridCellBorderStyle: DataGridViewCellBorderStyle.SingleHorizontal,
                     DarkInputs: true,
                     FluentPadding: true,
                     LegacyButtonSystemStyle: false),
@@ -411,6 +493,15 @@ namespace SpiceChecker.Services
                     FontSize: 9f,
                     HeaderHeight: 32,
                     RowHeight: 28,
+                    BorderStyle: FormBorderStyle.FixedSingle,
+                    FormPadding: new Padding(0, 8, 0, 0),
+                    UseFakeTitleBarPanel: true,
+                    FakeTitleBarHeight: 32,
+                    Use3DBorders: false,
+                    ButtonFlatStyle: FlatStyle.Flat,
+                    ButtonBorderSize: 0,
+                    UseSystemToolStripRenderer: false,
+                    GridCellBorderStyle: DataGridViewCellBorderStyle.SingleHorizontal,
                     DarkInputs: false,
                     FluentPadding: true,
                     LegacyButtonSystemStyle: false)
@@ -442,40 +533,45 @@ namespace SpiceChecker.Services
             }
         }
 
-        private static void ApplyAeroGlassPanel(Form form, AppTheme theme, ThemeColors colors)
+        private static void ApplyTitleBarPanel(Form form, AppTheme theme, ThemeColors colors)
         {
-            var existing = form.Controls.Find(AeroGlassPanelName, false).FirstOrDefault();
-
-            if (theme != AppTheme.AeroSeven)
+            if (form is MainForm mainForm)
             {
-                if (existing != null)
-                {
-                    form.Controls.Remove(existing);
-                    existing.Dispose();
-                }
+                ConfigureTitleBarPanel(mainForm, colors);
+            }
+        }
 
+        private static void ConfigureTitleBarPanel(MainForm mainForm, ThemeColors colors)
+        {
+            var panel = mainForm.TitleBarPanel;
+            if (panel == null)
+                return;
+
+            if (!colors.UseFakeTitleBarPanel)
+            {
+                panel.Visible = false;
+                panel.Height = 0;
                 return;
             }
 
-            Panel panel;
-            if (existing is Panel p)
-            {
-                panel = p;
-            }
-            else
-            {
-                panel = new Panel
-                {
-                    Name = AeroGlassPanelName,
-                    Height = 28,
-                    Dock = DockStyle.Top,
-                    Enabled = false
-                };
-                form.Controls.Add(panel);
-                panel.BringToFront();
-            }
-
+            panel.Dock = DockStyle.Top;
+            panel.Visible = true;
+            panel.Height = colors.FakeTitleBarHeight;
             panel.BackColor = colors.TitleBarBack;
+            panel.ForeColor = colors.TitleBarFore;
+            panel.BringToFront();
+        }
+
+        private static void ApplyToButton(Button button, ThemeColors colors)
+        {
+            button.UseVisualStyleBackColor = false;
+            button.FlatStyle = colors.ButtonFlatStyle;
+            button.BackColor = colors.ButtonFace;
+            button.ForeColor = colors.WindowFore;
+            button.FlatAppearance.BorderSize = colors.ButtonBorderSize;
+            button.FlatAppearance.BorderColor = colors.ButtonShadow;
+            button.FlatAppearance.MouseOverBackColor = colors.ButtonFlatStyle == FlatStyle.Flat ? colors.SelectionBack : colors.ButtonHighlight;
+            button.FlatAppearance.MouseDownBackColor = colors.ButtonShadow;
         }
 
         private sealed class XpColorTable : ProfessionalColorTable
