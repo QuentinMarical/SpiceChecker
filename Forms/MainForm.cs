@@ -35,7 +35,14 @@ namespace SpiceChecker
         private ToolStripLabel _lblSource = null!, _lblTheme = null!;
         private ToolStripComboBox _cbTheme = null!;
         private readonly SettingsService.AppSettings _settings = SettingsService.Load();
-        private ThemeDefinition _currentTheme = ThemeCatalog.GetTheme(ThemeId.Fluent11Dark);
+        private static readonly ThemeId[] AvailableThemeIds =
+        {
+            ThemeId.Legacy95,
+            ThemeId.LunaXP,
+            ThemeId.Aero7,
+            ThemeId.Fluent11Light
+        };
+        private ThemeDefinition _currentTheme = ThemeCatalog.GetTheme(ThemeId.Fluent11Light);
         private CustomTitleBar _titleBar = null!;
 
         // Filtres
@@ -119,10 +126,7 @@ namespace SpiceChecker
                 "Legacy 95",
                 "Luna XP",
                 "Aero 7",
-                "Modern (clair)",
-                "Modern (sombre)",
-                "Fluent 11 (clair)",
-                "Fluent 11 (sombre)"
+                "Fluent 11 (clair)"
             });
 
             try
@@ -332,15 +336,21 @@ namespace SpiceChecker
                 };
             }
 
-            _currentTheme = ThemeCatalog.GetTheme(savedThemeId);
+            var selectableThemeId = NormalizeSelectableTheme(savedThemeId);
+            _currentTheme = ThemeCatalog.GetTheme(selectableThemeId);
             EnsureCustomTitleBar();
 
-            if (_cbTheme.SelectedIndex != (int)_currentTheme.Id)
-            {
-                _cbTheme.SelectedIndex = (int)_currentTheme.Id;
-            }
+            var selectedIndex = Array.IndexOf(AvailableThemeIds, _currentTheme.Id);
+            _cbTheme.SelectedIndex = selectedIndex >= 0 ? selectedIndex : 0;
 
             ApplyCurrentTheme();
+        }
+
+        private static ThemeId NormalizeSelectableTheme(ThemeId themeId)
+        {
+            return Array.IndexOf(AvailableThemeIds, themeId) >= 0
+                ? themeId
+                : ThemeId.Fluent11Light;
         }
 
         private void EnsureCustomTitleBar()
@@ -526,7 +536,12 @@ namespace SpiceChecker
                     return;
                 }
 
-                _currentTheme = ThemeCatalog.GetTheme((ThemeId)_cbTheme.SelectedIndex);
+                if (_cbTheme.SelectedIndex >= AvailableThemeIds.Length)
+                {
+                    return;
+                }
+
+                _currentTheme = ThemeCatalog.GetTheme(AvailableThemeIds[_cbTheme.SelectedIndex]);
                 ApplyCurrentTheme();
                 _settings.LastTheme = _currentTheme.Id.ToString();
                 SettingsService.Save(_settings);

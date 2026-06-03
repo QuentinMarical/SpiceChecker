@@ -23,10 +23,17 @@ namespace SpiceChecker.Rules
             row.AnomalieNiveau = "OK";
             row.SousEtatConseille = "";
 
+            if (string.IsNullOrWhiteSpace(row.SousEtat))
+            {
+                row.AnomalieMessage = "Sous-état manquant";
+                row.AnomalieNiveau = NiveauAnomalie.Erreur.ToString();
+                row.SousEtatConseille = "Renseigner le sous-état";
+                return;
+            }
+
             // Early exit : "Disponible neuf" et "Reprise en attente" ne sont JAMAIS des anomalies
-            if (!string.IsNullOrEmpty(row.SousEtat) &&
-                (row.SousEtat.Equals("Disponible neuf", StringComparison.OrdinalIgnoreCase) ||
-                 row.SousEtat.Equals("Reprise en attente", StringComparison.OrdinalIgnoreCase)))
+            if (row.SousEtat.Equals("Disponible neuf", StringComparison.OrdinalIgnoreCase) ||
+                row.SousEtat.Equals("Reprise en attente", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
