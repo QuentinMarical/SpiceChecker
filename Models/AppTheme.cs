@@ -65,5 +65,7 @@ namespace SpiceChecker.Models
         public Color BackdropFallbackTint { get; init; } = Color.FromArgb(200, 32, 32, 32);
 
         public bool IsDark => Id is ThemeId.ModernDark or ThemeId.Fluent11Dark;
+        public bool HasNativeTitleBar => Id is ThemeId.Fluent11Light or ThemeId.Fluent11Dark;
+        public bool RequiresTransparentControls => Backdrop != BackdropEffect.None;
     }
 }

@@ -10,10 +10,23 @@ namespace SpiceChecker.Services;
 /// </summary>
 internal static class DwmHelper
 {
+    public enum BackdropType
+    {
+        Auto = 0,
+        None = 1,
+        Mica = 2,
+        Acrylic = 3,
+        Tabbed = 4
+    }
+
     // ── DWM attributes ──────────────────────────────────────────────────────
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
-    private const int DWMWA_SYSTEMBACKDROP_TYPE     = 38;   // Win 11 22H2+
-    private const int DWMWA_MICA_EFFECT             = 1029; // Win 11 21H2 (fallback)
+    private const int DWMWA_NCRENDERING_POLICY       = 2;
+    private const int DWMWA_USE_HOSTBACKDROPBRUSH    = 17;
+    private const int DWMWA_SYSTEMBACKDROP_TYPE      = 38;   // Win 11 22H2+
+    private const int DWMWA_MICA_EFFECT              = 1029; // Win 11 21H2 (fallback)
+
+    private const int DWMNCRP_ENABLED = 2;
 
     private enum DWM_SYSTEMBACKDROP_TYPE
     {
@@ -66,6 +79,42 @@ internal static class DwmHelper
     {
         var v = Environment.OSVersion.Version;
         return v.Major >= 10 && v.Build >= 22000;
+    }
+
+    public static void ApplyModernBackdrop(IntPtr hwnd, BackdropType type)
+    {
+        if (hwnd == IntPtr.Zero || !IsWin11OrLater()) return;
+
+        try
+        {
+            DwmIsCompositionEnabled(out bool comp);
+            if (!comp) return;
+        }
+        catch
+        {
+            return;
+        }
+
+        try
+        {
+            int ncRenderingPolicy = DWMNCRP_ENABLED;
+            DwmSetWindowAttribute(hwnd, DWMWA_NCRENDERING_POLICY, ref ncRenderingPolicy, sizeof(int));
+        }
+        catch { }
+
+        try
+        {
+            int hostBackdropBrush = 1;
+            DwmSetWindowAttribute(hwnd, DWMWA_USE_HOSTBACKDROPBRUSH, ref hostBackdropBrush, sizeof(int));
+        }
+        catch { }
+
+        try
+        {
+            int backdrop = (int)type;
+            DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdrop, sizeof(int));
+        }
+        catch { }
     }
 
     /// <summary>Active Mica (DWMWA_SYSTEMBACKDROP_TYPE = 2) sur Win 11 22H2+.</summary>

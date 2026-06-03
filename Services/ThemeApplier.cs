@@ -10,22 +10,52 @@ namespace SpiceChecker.Services
         public static void Apply(Form form, ThemeDefinition theme, DataGridView grid,
             Panel toolbarPanel, Panel filterPanel, ToolStrip? toolStrip = null)
         {
-            form.BackColor = theme.FormBackground;
+            bool hasBackdrop = theme.Backdrop != BackdropEffect.None;
+
+            // BackColor de base ou semi-transparent pour Mica/Acrylic
+            if (hasBackdrop)
+            {
+                form.BackColor = theme.IsDark
+                    ? Color.FromArgb(32, 32, 32)
+                    : Color.FromArgb(243, 243, 243);
+            }
+            else
+            {
+                form.BackColor = theme.FormBackground;
+            }
+
             form.Font = theme.BaseFont;
             bool isFluent = theme.Id is ThemeId.Fluent11Light or ThemeId.Fluent11Dark;
             if (!isFluent)
                 form.FormBorderStyle = FormBorderStyle.None;
 
-            toolbarPanel.BackColor = theme.ToolbarBackground;
+            // Transparence des panels si backdrop actif
+            if (hasBackdrop)
+            {
+                MakeTransparent(toolbarPanel);
+                MakeTransparent(filterPanel);
+                if (toolStrip != null)
+                {
+                    toolStrip.BackColor = Color.Transparent;
+                    toolStrip.Renderer = new TransparentToolStripRenderer(theme);
+                }
+            }
+            else
+            {
+                toolbarPanel.BackColor = theme.ToolbarBackground;
+                filterPanel.BackColor = theme.FilterBarBackground;
+                if (toolStrip != null)
+                {
+                    toolStrip.BackColor = theme.ToolbarBackground;
+                    toolStrip.ForeColor = theme.TextColor;
+                    toolStrip.Renderer = new ThemedToolStripRenderer(theme);
+                }
+            }
 
             if (toolStrip != null)
             {
-                toolStrip.BackColor = theme.ToolbarBackground;
                 toolStrip.ForeColor = theme.TextColor;
-                toolStrip.Renderer = new ThemedToolStripRenderer(theme);
             }
-
-            filterPanel.BackColor = theme.FilterBarBackground;
 
             ApplyToControls(toolbarPanel, theme);
             ApplyToControls(filterPanel, theme);
@@ -61,8 +91,18 @@ namespace SpiceChecker.Services
             }
         }
 
+        private static void MakeTransparent(Panel panel)
+        {
+            panel.BackColor = Color.Transparent;
+            var doubleBufferProperty = typeof(Control).GetProperty("DoubleBuffered",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            doubleBufferProperty?.SetValue(panel, true, null);
+        }
+
         private static void ApplyToControls(Control parent, ThemeDefinition theme)
         {
+            bool hasBackdrop = theme.Backdrop != BackdropEffect.None;
+
             foreach (Control ctrl in parent.Controls)
             {
                 ctrl.Font = theme.BaseFont;
@@ -90,10 +130,12 @@ namespace SpiceChecker.Services
                 else if (ctrl is Label lbl)
                 {
                     lbl.ForeColor = theme.TextColor;
+                    if (hasBackdrop) lbl.BackColor = Color.Transparent;
                 }
                 else if (ctrl is CheckBox chk)
                 {
                     chk.ForeColor = theme.TextColor;
+                    if (hasBackdrop) chk.BackColor = Color.Transparent;
                 }
                 else if (ctrl.HasChildren)
                 {
@@ -131,6 +173,39 @@ namespace SpiceChecker.Services
         protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
         {
             using var pen = new Pen(_theme.SeparatorColor);
+            int x = e.Item.Width / 2;
+            e.Graphics.DrawLine(pen, x, 4, x, e.Item.Height - 4);
+        }
+    }
+
+    internal class TransparentToolStripRenderer : ToolStripProfessionalRenderer
+    {
+        private readonly ThemeDefinition _theme;
+
+        public TransparentToolStripRenderer(ThemeDefinition theme)
+        {
+            _theme = theme;
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            // Ne rien dessiner = transparent
+        }
+
+        protected override void OnRenderButtonBackground(ToolStripItemRenderEventArgs e)
+        {
+            var item = e.Item;
+            if (item.Selected || item.Pressed)
+            {
+                // Overlay semi-transparent pour hover
+                using var brush = new SolidBrush(Color.FromArgb(40, _theme.ButtonHover));
+                e.Graphics.FillRectangle(brush, new Rectangle(0, 0, item.Width, item.Height));
+            }
+        }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+        {
+            using var pen = new Pen(Color.FromArgb(100, _theme.SeparatorColor));
             int x = e.Item.Width / 2;
             e.Graphics.DrawLine(pen, x, 4, x, e.Item.Height - 4);
         }

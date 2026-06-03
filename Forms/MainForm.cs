@@ -91,12 +91,13 @@ namespace SpiceChecker
             AllowDrop = true;
             MinimumSize = new Size(960, 540);
             FormBorderStyle = FormBorderStyle.None;
+            DoubleBuffered = true;
         }
 
         private void BuildUi()
         {
             // Toolbar
-            _toolbarPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0) };
+            _toolbarPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0), BackColor = Color.Transparent };
             _toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Fill };
             _btnOpen = new ToolStripButton("Ouvrir XLSX...");
             _btnExport = new ToolStripButton("Export CSV") { Enabled = false };
@@ -184,7 +185,8 @@ namespace SpiceChecker
                 Dock = DockStyle.Top,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                Padding = new Padding(0)
+                Padding = new Padding(0),
+                BackColor = Color.Transparent
             };
             _filterPanel = new TableLayoutPanel
             {
@@ -193,7 +195,8 @@ namespace SpiceChecker
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Padding = new Padding(6, 4, 6, 4),
                 RowCount = 1,
-                ColumnCount = 13
+                ColumnCount = 13,
+                BackColor = Color.Transparent
             };
 
             for (int i = 0; i < 13; i++)
@@ -223,8 +226,8 @@ namespace SpiceChecker
             var lblMod = new Label { Text = "Modèle :", AutoSize = true, Anchor = AnchorStyles.Left };
             _cbModele = new ComboBox { Width = 220, DropDownStyle = ComboBoxStyle.DropDownList, Anchor = AnchorStyles.Left };
 
-            _chkAnomaliesOnly = new CheckBox { Text = "Anomalies uniquement", AutoSize = true, Anchor = AnchorStyles.Left };
-            var btnReset = new Button { Text = "Réinitialiser", AutoSize = true, Anchor = AnchorStyles.Left };
+            _chkAnomaliesOnly = new CheckBox { Text = "Anomalies uniquement", AutoSize = true, Anchor = AnchorStyles.Left, BackColor = Color.Transparent, FlatStyle = FlatStyle.System };
+            var btnReset = new Button { Text = "Réinitialiser", AutoSize = true, Anchor = AnchorStyles.Left, FlatStyle = FlatStyle.System };
             btnReset.Click += (s, e) =>
             {
                 _txtSearch.Text = string.Empty;
@@ -265,9 +268,10 @@ namespace SpiceChecker
                 AutoGenerateColumns = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
                 RowHeadersVisible = false,
-                BackgroundColor = SystemColors.Window,
+                BackgroundColor = Color.Transparent,
                 BorderStyle = BorderStyle.None
             };
+            _grid.DefaultCellStyle.BackColor = Color.FromArgb(0, 0, 0, 0);
             ConfigureColumns();
             _bs.DataSource = _view;
             _grid.DataSource = _bs;
@@ -412,18 +416,23 @@ namespace SpiceChecker
 
                 // Mica > Mica legacy > Acrylic legacy
                 DwmHelper.ApplyBestEffect(Handle, BackdropEffect.Mica, _currentTheme.BackdropFallbackTint);
-
-                // Fond compatible Mica
-                BackColor = _currentTheme.Id == ThemeId.Fluent11Dark
-                    ? Color.FromArgb(32, 32, 32)
-                    : Color.FromArgb(243, 243, 243);
             }
             else
             {
                 // Retour à CustomTitleBar pour les autres thèmes
                 FormBorderStyle = FormBorderStyle.None;
                 if (_titleBar != null) _titleBar.Visible = true;
-                DwmHelper.DisableBackdrop(Handle);
+
+                // Appliquer backdrop pour Aero7 / ModernDark
+                if (_currentTheme.Backdrop != BackdropEffect.None)
+                {
+                    DwmHelper.SetDarkTitleBar(Handle, _currentTheme.IsDark);
+                    DwmHelper.ApplyBestEffect(Handle, _currentTheme.Backdrop, _currentTheme.BackdropFallbackTint);
+                }
+                else
+                {
+                    DwmHelper.DisableBackdrop(Handle);
+                }
             }
         }
 
@@ -548,6 +557,7 @@ namespace SpiceChecker
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            DwmHelper.ApplyModernBackdrop(Handle, DwmHelper.BackdropType.Mica);
             ApplyFluentEffect();
         }
 

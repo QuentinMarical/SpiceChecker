@@ -49,6 +49,10 @@ namespace SpiceChecker.Forms
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
+
+            // Skip rendering if the theme uses native title bar
+            if (_theme.HasNativeTitleBar) return;
+
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
