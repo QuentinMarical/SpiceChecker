@@ -389,6 +389,20 @@ namespace SpiceChecker
             _titleBar.ApplyTheme(_currentTheme);
             ThemeApplier.Apply(this, _currentTheme, _grid, _toolbarPanel, _filterPanelHost, _toolbar);
 
+            if (IsHandleCreated)
+            {
+                if (_currentTheme.Backdrop != BackdropEffect.None)
+                {
+                    DwmHelper.ApplyBestEffect(Handle, _currentTheme.Backdrop, _currentTheme.BackdropFallbackTint);
+                }
+                else
+                {
+                    DwmHelper.DisableBackdrop(Handle);
+                }
+            }
+
+            BackColor = ColorHelper.EnsureMinAlpha(_currentTheme.BackgroundColor, 220);
+
             Padding = _currentTheme.HasOuterBorder3D
                 ? new Padding(2)
                 : new Padding(1);
@@ -562,8 +576,8 @@ namespace SpiceChecker
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            DwmHelper.ApplyModernBackdrop(Handle, DwmHelper.BackdropType.Mica);
-            ApplyFluentEffect();
+            DwmHelper.ApplyBestEffect(Handle, _currentTheme.Backdrop, _currentTheme.BackdropFallbackTint);
+            ApplyCurrentTheme();
         }
 
         // ==================================================================
@@ -658,7 +672,11 @@ namespace SpiceChecker
         private void RebuildModeleDropdown()
         {
             var fabSel = _cbFabricant.SelectedItem as string;
+            var catSel = _cbCategorie.SelectedItem as string;
             IEnumerable<HardwareRow> q = _allRows;
+
+            if (!string.IsNullOrEmpty(catSel) && catSel != "(toutes)")
+                q = q.Where(r => MatchCategory(r.CategorieModele, catSel));
 
             if (!string.IsNullOrEmpty(fabSel) && fabSel != "(tous)")
                 q = q.Where(r => string.Equals(r.Fabricant, fabSel, StringComparison.OrdinalIgnoreCase));
@@ -697,7 +715,7 @@ namespace SpiceChecker
                 q = q.Where(r => string.Equals(r.SousEtat, seSel, StringComparison.OrdinalIgnoreCase));
 
             if (!string.IsNullOrEmpty(catSel) && catSel != "(toutes)")
-                q = q.Where(r => string.Equals(r.CategorieModele, catSel, StringComparison.OrdinalIgnoreCase));
+                q = q.Where(r => MatchCategory(r.CategorieModele, catSel));
 
             if (!string.IsNullOrEmpty(fabSel) && fabSel != "(tous)")
                 q = q.Where(r => string.Equals(r.Fabricant, fabSel, StringComparison.OrdinalIgnoreCase));
@@ -711,17 +729,54 @@ namespace SpiceChecker
             if (search.Length > 0)
             {
                 q = q.Where(r =>
-                    (r.AssetTag ?? "").ToLowerInvariant().Contains(search) ||
-                    (r.Modele ?? "").ToLowerInvariant().Contains(search) ||
-                    (r.Fabricant ?? "").ToLowerInvariant().Contains(search) ||
-                    (r.AffecteA ?? "").ToLowerInvariant().Contains(search) ||
-                    (r.SousEtat ?? "").ToLowerInvariant().Contains(search));
+                    NormalizeForSearch(r.AssetTag).Contains(search) ||
+                    NormalizeForSearch(r.Modele).Contains(search) ||
+                    NormalizeForSearch(r.Fabricant).Contains(search) ||
+                    NormalizeForSearch(r.AffecteA).Contains(search) ||
+                    NormalizeForSearch(r.SousEtat).Contains(search) ||
+                    NormalizeForSearch(r.CategorieModele).Contains(search));
             }
 
             var list = q.ToList();
             _view = new BindingList<HardwareRow>(list);
             _bs.DataSource = _view;
             UpdateCount();
+        }
+
+        private static bool MatchCategory(string? rowCategory, string selectedCategory)
+        {
+            var left = NormalizeForSearch(rowCategory);
+            var right = NormalizeForSearch(selectedCategory);
+
+            if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+                return false;
+
+            if (left == right)
+                return true;
+
+            if (right == "ordinateur" || right == "ordinateurs")
+                return left.Contains("ordinateur");
+
+            return left.Contains(right) || right.Contains(left);
+        }
+
+        private static string NormalizeForSearch(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return string.Empty;
+
+            var normalized = value.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder(normalized.Length);
+
+            foreach (var ch in normalized)
+            {
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    sb.Append(ch);
+                }
+            }
+
+            return sb.ToString().Normalize(NormalizationForm.FormC).ToLowerInvariant();
         }
 
         private void UpdateCount()

@@ -77,7 +77,9 @@ namespace SpiceChecker.Services
             { "categoriemodele",              "CategorieModele" },
             { "categorie",                    "CategorieModele" },
             { "modelcategory",                "CategorieModele" },
+            { "categorymodel",                "CategorieModele" },
             { "category",                     "CategorieModele" },
+            { "ordinateur",                   "CategorieModele" },
 
             // Modele
             { "modele",                       "Modele" },
