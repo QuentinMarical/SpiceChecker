@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using SpiceChecker.Models;
 
 namespace SpiceChecker.Rules
@@ -10,9 +11,10 @@ namespace SpiceChecker.Rules
         public RuleEngine()
         {
             _rules.Add(new HighRamLenovoRule());
-            // Ajouter ici les futures règles :
-            // _rules.Add(new DefectiveStateRule());
-            // _rules.Add(new RevalorisationRule());
+            _rules.Add(new DefectiveStateRule());
+            _rules.Add(new RevalorisationRule());
+            _rules.Add(new L13L14RenewalRule());  // ← AJOUT : Règle L13/L14 8 Go avec logique date renouvellement
+            _rules.Add(new StaleSubstateRule());
         }
 
         public void EvaluateRow(HardwareRow row)
@@ -20,6 +22,14 @@ namespace SpiceChecker.Rules
             row.AnomalieMessage = "";
             row.AnomalieNiveau = "OK";
             row.SousEtatConseille = "";
+
+            // Early exit : "Disponible neuf" et "Reprise en attente" ne sont JAMAIS des anomalies
+            if (!string.IsNullOrEmpty(row.SousEtat) &&
+                (row.SousEtat.Equals("Disponible neuf", StringComparison.OrdinalIgnoreCase) ||
+                 row.SousEtat.Equals("Reprise en attente", StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
 
             foreach (var rule in _rules)
             {

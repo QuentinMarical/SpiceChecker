@@ -7,13 +7,14 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using ClosedXML.Excel;
 using SpiceChecker.Models;
 using SpiceChecker.Rules;
 using SpiceChecker.Services;
 
 namespace SpiceChecker
 {
-    public partial class MainForm : Form
+    public class MainForm : Form
     {
         private readonly XlsxLoader _loader = new XlsxLoader();
         private readonly RuleEngine _engine = new RuleEngine();
@@ -23,21 +24,23 @@ namespace SpiceChecker
         private readonly BindingSource _bs = new BindingSource();
 
         // Toolbar
-        private ToolStrip _toolbar;
-        private ToolStripButton _btnOpen, _btnExport, _btnPrint, _btnCopy, _btnAbout;
-        private ToolStripLabel _lblSource;
+        private ToolStrip _toolbar = null!;
+        private ToolStripButton _btnOpen = null!, _btnExport = null!, _btnExportXlsx = null!, _btnPrint = null!, _btnCopy = null!, _btnAbout = null!;
+        private ToolStripLabel _lblSource = null!;
 
         // Filtres
-        private Panel _filterPanel;
-        private TextBox _txtSearch;
-        private ComboBox _cbSousEtat, _cbCategorie;
-        private CheckBox _chkAnomaliesOnly;
-        private Label _lblCount;
+        private Panel _filterPanel = null!;
+        private TextBox _txtSearch = null!;
+        private ComboBox _cbSousEtat = null!, _cbCategorie = null!;
+        private CheckBox _chkAnomaliesOnly = null!;
+        private Label _lblCount = null!;
 
         // Grille + statut
-        private DataGridView _grid;
-        private StatusStrip _status;
-        private ToolStripStatusLabel _statusLabel;
+        private DataGridView _grid = null!;
+        private StatusStrip _status = null!;
+        private ToolStripStatusLabel _statusLabel = null!;
+        private ContextMenuStrip _contextMenu = null!;
+        private int _contextMenuRowIndex = -1;
 
         // Pour l'impression
         private int _printRowIndex = 0;
@@ -70,6 +73,7 @@ namespace SpiceChecker
             _toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
             _btnOpen = new ToolStripButton("Ouvrir XLSX...");
             _btnExport = new ToolStripButton("Export CSV") { Enabled = false };
+            _btnExportXlsx = new ToolStripButton("Export XLSX") { Enabled = false };
             _btnPrint = new ToolStripButton("Imprimer") { Enabled = false };
             _btnCopy = new ToolStripButton("Copier sélection") { Enabled = false };
             _btnAbout = new ToolStripButton("À propos");
@@ -78,7 +82,7 @@ namespace SpiceChecker
             _toolbar.Items.AddRange(new ToolStripItem[]
             {
                 _btnOpen, new ToolStripSeparator(),
-                _btnExport, _btnPrint, _btnCopy,
+                _btnExport, _btnExportXlsx, _btnPrint, _btnCopy,
                 new ToolStripSeparator(), _btnAbout,
                 new ToolStripSeparator(), _lblSource
             });
@@ -125,6 +129,11 @@ namespace SpiceChecker
             _bs.DataSource = _view;
             _grid.DataSource = _bs;
 
+            // Menu contextuel (initialise à null, sera défini dynamiquement au clic droit)
+            _contextMenu = new ContextMenuStrip();
+            _contextMenu.Items.Add("Modifier le sous-état...", null, (s, e) => EditSubState());
+            _grid.ContextMenuStrip = null; // Désactiver par défaut
+
             // Status
             _status = new StatusStrip();
             _statusLabel = new ToolStripStatusLabel("Prêt — glisse un fichier XLSX ou clique Ouvrir");
@@ -170,6 +179,7 @@ namespace SpiceChecker
         {
             _btnOpen.Click += (s, e) => OpenFileDialogAndLoad();
             _btnExport.Click += (s, e) => ExportCsv();
+            _btnExportXlsx.Click += (s, e) => ExportXlsx();
             _btnPrint.Click += (s, e) => PrintGrid();
             _btnCopy.Click += (s, e) => CopySelection();
             _btnAbout.Click += (s, e) => MessageBox.Show(
@@ -182,18 +192,29 @@ namespace SpiceChecker
             _chkAnomaliesOnly.CheckedChanged += (s, e) => ApplyFilters();
 
             _grid.CellFormatting += Grid_CellFormatting;
+            _grid.CellMouseDown += Grid_CellMouseDown;
 
             // Drag & drop
             this.DragEnter += (s, e) =>
             {
                 if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
-                    e.Effect = DragDropEffects.Copy;
+                {
+                    var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+                    // Accepter si au moins un fichier .xlsx est présent
+                    var hasXlsx = files?.Any(f => f != null && f.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase)) ?? false;
+                    e.Effect = hasXlsx ? DragDropEffects.Copy : DragDropEffects.None;
+                }
+                else
+                {
+                    e.Effect = DragDropEffects.None;
+                }
             };
             this.DragDrop += (s, e) =>
             {
                 if (e.Data == null) return;
-                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                var xlsx = files.FirstOrDefault(f => f.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase));
+                var data = e.Data.GetData(DataFormats.FileDrop) as string[];
+                if (data == null) return;
+                var xlsx = data.FirstOrDefault(f => f != null && f.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase));
                 if (xlsx != null) LoadFile(xlsx);
             };
 
@@ -204,6 +225,7 @@ namespace SpiceChecker
                 if (e.Control && e.KeyCode == Keys.O) { OpenFileDialogAndLoad(); e.Handled = true; }
                 else if (e.Control && e.KeyCode == Keys.F) { _txtSearch.Focus(); _txtSearch.SelectAll(); e.Handled = true; }
                 else if (e.Control && e.KeyCode == Keys.E && _btnExport.Enabled) { ExportCsv(); e.Handled = true; }
+                else if (e.Control && e.KeyCode == Keys.X && _btnExportXlsx.Enabled) { ExportXlsx(); e.Handled = true; }
                 else if (e.Control && e.KeyCode == Keys.P && _btnPrint.Enabled) { PrintGrid(); e.Handled = true; }
             };
         }
@@ -239,7 +261,7 @@ namespace SpiceChecker
 
                 _lblSource.Text = $"{Path.GetFileName(path)}  ({_allRows.Count} lignes, feuille \"{res.SheetName}\")";
                 _lblSource.ForeColor = Color.Black;
-                _btnExport.Enabled = _btnPrint.Enabled = _btnCopy.Enabled = _allRows.Count > 0;
+                _btnExport.Enabled = _btnPrint.Enabled = _btnCopy.Enabled = _btnExportXlsx.Enabled = _allRows.Count > 0;
 
                 var warn = res.Warnings.Count > 0 ? "  ⚠ " + string.Join(" | ", res.Warnings) : "";
                 _statusLabel.Text = $"Chargé : {_allRows.Count} lignes." + warn;
@@ -326,7 +348,7 @@ namespace SpiceChecker
         // ==================================================================
         //  Coloration des lignes selon le niveau d'anomalie
         // ==================================================================
-        private void Grid_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        private void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
         {
             if (e.RowIndex < 0 || e.RowIndex >= _view.Count) return;
             var row = _view[e.RowIndex];
@@ -335,13 +357,70 @@ namespace SpiceChecker
             Color back;
             switch (row.AnomalieNiveau)
             {
-                case "Erreur": back = Color.FromArgb(255, 220, 220); break;
-                case "Avertissement": back = Color.FromArgb(255, 240, 200); break;
-                case "Info": back = Color.FromArgb(220, 235, 255); break;
+                case "Erreur": back = Color.FromArgb(255, 200, 200); break;
+                case "Avertissement": back = Color.FromArgb(255, 220, 180); break;
+                case "Info": back = Color.FromArgb(200, 220, 255); break;
+                case "OK": back = Color.FromArgb(220, 245, 220); break;
                 default: back = Color.White; break;
             }
             e.CellStyle.BackColor = back;
         }
+
+        // ==================================================================
+        //  Menu contextuel pour modifier le sous-état
+        // ==================================================================
+        private void Grid_CellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right || e.RowIndex < 0) 
+            {
+                _contextMenuRowIndex = -1;
+                _grid.ContextMenuStrip = null; // Ne pas afficher le menu si pas de ligne
+                return;
+            }
+
+            // Sélectionner la ligne cliquée et mémoriser l'index
+            _contextMenuRowIndex = e.RowIndex;
+            _grid.ClearSelection();
+            _grid.Rows[e.RowIndex].Selected = true;
+            _grid.ContextMenuStrip = _contextMenu; // Autoriser le menu contextuel
+        }
+
+        private void EditSubState()
+        {
+            if (_contextMenuRowIndex < 0 || _contextMenuRowIndex >= _view.Count)
+                return;
+
+            var row = _view[_contextMenuRowIndex];
+            if (row == null)
+                return;
+
+            // Afficher le formulaire de dialogue pour modifier le sous-état
+            using (var dlg = new EditSubStateForm(row.SousEtat ?? ""))
+            {
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    var newSubState = dlg.SelectedSubState.Trim();
+                    if (!string.IsNullOrEmpty(newSubState) && newSubState != row.SousEtat)
+                    {
+                        // Mettre à jour le sous-état
+                        row.SousEtat = newSubState;
+
+                        // Réévaluer la ligne
+                        _engine.EvaluateRow(row);
+
+                        // Rafraîchir l'affichage du DataGridView
+                        // _view est une BindingList qui référence les mêmes objets que _allRows
+                        // donc les modifications sont automatiquement propagées
+                        _grid.Invalidate();
+
+                        _statusLabel.Text = $"Sous-état modifié pour {row.AssetTag} : {newSubState}";
+                    }
+                }
+            }
+
+            _contextMenuRowIndex = -1;
+        }
+
         // ==================================================================
         //  Export CSV UTF-8 BOM
         // ==================================================================
@@ -379,6 +458,114 @@ namespace SpiceChecker
             {
                 MessageBox.Show(this, "Erreur d'export :\n" + ex.Message,
                     "Export CSV", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // ==================================================================
+        //  Export XLSX avec ClosedXML (anomalies colonnes dédiées)
+        // ==================================================================
+        private void ExportXlsx()
+        {
+            if (_view.Count == 0) return;
+
+            using var dlg = new SaveFileDialog
+            {
+                Filter = "Classeur Excel (*.xlsx)|*.xlsx",
+                Title = "Exporter en XLSX",
+                FileName = "spice_anomalies_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + ".xlsx"
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+                _statusLabel.Text = "Génération du XLSX...";
+                Application.DoEvents();
+
+                using var wb = new XLWorkbook();
+                var ws = wb.Worksheets.Add("Spice_Anomalies");
+
+                var cols = _grid.Columns.Cast<DataGridViewColumn>()
+                            .Where(c => c.Visible).OrderBy(c => c.DisplayIndex).ToList();
+
+                int col = 1;
+                foreach (var c in cols)
+                {
+                    var cell = ws.Cell(1, col);
+                    cell.Value = c.HeaderText;
+                    cell.Style.Font.SetBold();
+                    cell.Style.Fill.SetBackgroundColor(XLColor.FromArgb(230, 230, 230));
+                    col++;
+                }
+
+                string[] extraHeaders = { "⚠ Anomalie ?", "Niveau", "Action Recommandée" };
+                foreach (var h in extraHeaders)
+                {
+                    var cell = ws.Cell(1, col);
+                    cell.Value = h;
+                    cell.Style.Font.SetBold();
+                    cell.Style.Fill.SetBackgroundColor(XLColor.FromArgb(255, 200, 200));
+                    col++;
+                }
+
+                int row = 2;
+                foreach (var hwRow in _view)
+                {
+                    col = 1;
+                    foreach (var c in cols)
+                    {
+                        ws.Cell(row, col).Value = GetCellString(hwRow, c.DataPropertyName);
+                        col++;
+                    }
+
+                    bool isAnomaly = !string.IsNullOrEmpty(hwRow.AnomalieNiveau) && hwRow.AnomalieNiveau != "OK";
+                    ws.Cell(row, col++).Value = isAnomaly ? "OUI" : "Non";
+                    ws.Cell(row, col++).Value = hwRow.AnomalieNiveau ?? "N/A";
+                    ws.Cell(row, col++).Value = hwRow.SousEtatConseille ?? "N/A";
+
+                    var range = ws.Range(row, 1, row, col - 1);
+                    switch (hwRow.AnomalieNiveau)
+                    {
+                        case "Erreur":
+                            range.Style.Fill.SetBackgroundColor(XLColor.FromArgb(255, 200, 200));
+                            break;
+                        case "Avertissement":
+                            range.Style.Fill.SetBackgroundColor(XLColor.FromArgb(255, 220, 180));
+                            break;
+                        case "Info":
+                            range.Style.Fill.SetBackgroundColor(XLColor.FromArgb(200, 220, 255));
+                            break;
+                        case "OK":
+                            range.Style.Fill.SetBackgroundColor(XLColor.FromArgb(220, 245, 220));
+                            break;
+                    }
+
+                    row++;
+                }
+
+                ws.Columns().AdjustToContents();
+                ws.Row(1).Height = 22;
+                ws.SheetView.FreezeRows(1);
+                ws.Range(1, 1, Math.Max(1, row - 1), Math.Max(1, col - 1)).SetAutoFilter();
+
+                wb.SaveAs(dlg.FileName);
+
+                _statusLabel.Text = "Export XLSX : " + Path.GetFileName(dlg.FileName) +
+                                    $" ({_view.Count} lignes)";
+                MessageBox.Show(this,
+                    $"Export terminé !\n\n{_view.Count} lignes exportées.\n\n" +
+                    "Les colonnes \"⚠ Anomalie ?\", \"Niveau\" et \"Action Recommandée\"\n" +
+                    "permettent de trier et filtrer directement dans Excel.",
+                    "Export XLSX", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Erreur d'export XLSX :\n" + ex.Message,
+                    "Export XLSX", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
             }
         }
 
@@ -451,7 +638,7 @@ namespace SpiceChecker
             dlg.ShowDialog(this);
         }
 
-        private void Pd_PrintPage(object sender, PrintPageEventArgs e)
+        private void Pd_PrintPage(object? sender, PrintPageEventArgs e)
         {
             var g = e.Graphics;
             var bounds = e.MarginBounds;
@@ -502,9 +689,10 @@ namespace SpiceChecker
 
                 Color back = row.AnomalieNiveau switch
                 {
-                    "Erreur" => Color.FromArgb(255, 220, 220),
-                    "Avertissement" => Color.FromArgb(255, 240, 200),
-                    "Info" => Color.FromArgb(220, 235, 255),
+                    "Erreur" => Color.FromArgb(255, 200, 200),
+                    "Avertissement" => Color.FromArgb(255, 220, 180),
+                    "Info" => Color.FromArgb(200, 220, 255),
+                    "OK" => Color.FromArgb(220, 245, 220),
                     _ => Color.White
                 };
                 if (back != Color.White)

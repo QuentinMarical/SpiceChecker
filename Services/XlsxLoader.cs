@@ -22,68 +22,118 @@ namespace SpiceChecker.Services
     public class XlsxLoader
     {
         // Synonymes d'en-têtes acceptés (clé normalisée -> propriété cible)
+        // Les clés sont en minuscules, sans accents, sans espaces, sans tirets/ponctuation
+        // IMPORTANT : la clé "etat" est gérée dynamiquement dans ResolveMapping pour éviter
+        //             le conflit avec SousEtat dans certains exports SPICE.
         private static readonly Dictionary<string, string> HeaderMap =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            new Dictionary<string, string>(StringComparer.Ordinal)
         {
             // AssetTag
-            { "etiquette",            "AssetTag" },
-            { "etiquetteasset",       "AssetTag" },
-            { "assettag",             "AssetTag" },
-            { "tag",                  "AssetTag" },
-            { "numeroinventaire",     "AssetTag" },
-
-            // Etat
-            { "etat",                 "Etat" },
-            { "state",                "Etat" },
-            { "statut",               "Etat" },
-
-            // SousEtat
-            { "sousetat",             "SousEtat" },
-            { "substate",             "SousEtat" },
-            { "substatus",            "SousEtat" },
-
-            // Entrepot
-            { "entrepot",             "Entrepot" },
-            { "stockroom",            "Entrepot" },
-            { "magasin",              "Entrepot" },
-
-            // Categorie
-            { "categoriedemodele",    "CategorieModele" },
-            { "categoriemodele",      "CategorieModele" },
-            { "categorie",            "CategorieModele" },
-            { "modelcategory",        "CategorieModele" },
-
-            // Modele
-            { "modele",               "Modele" },
-            { "model",                "Modele" },
-
-            // Fabricant
-            { "fabricant",            "Fabricant" },
-            { "manufacturer",         "Fabricant" },
-            { "marque",               "Fabricant" },
-
-            // RAM
-            { "ram",                  "RamGo" },
-            { "ramgo",                "RamGo" },
-            { "memoire",              "RamGo" },
-            { "memory",               "RamGo" },
+            { "etiquette",                    "AssetTag" },
+            { "etiquetteasset",               "AssetTag" },
+            { "assettag",                     "AssetTag" },
+            { "tag",                          "AssetTag" },
+            { "numeroinventaire",             "AssetTag" },
+            { "elementdeconfiguration",       "AssetTag" },
+            { "configelement",                "AssetTag" },
 
             // N° série
-            { "numeroserie",          "NumeroSerie" },
-            { "ns",                   "NumeroSerie" },
-            { "serial",               "NumeroSerie" },
-            { "serialnumber",         "NumeroSerie" },
+            { "numeroserie",                  "NumeroSerie" },
+            { "ns",                           "NumeroSerie" },
+            { "serial",                       "NumeroSerie" },
+            { "serialnumber",                 "NumeroSerie" },
 
             // Affecté à
-            { "affectea",             "AffecteA" },
-            { "assignedto",           "AffecteA" },
-            { "utilisateur",          "AffecteA" },
+            { "affectea",                     "AffecteA" },
+            { "assignedto",                   "AffecteA" },
+            { "utilisateur",                  "AffecteA" },
+            { "affectation",                  "AffecteA" },
+            { "user",                         "AffecteA" },
+
+            // Etat  ("etat" seul est résolu dynamiquement dans ResolveMapping)
+            { "etat",                         "Etat" },
+            { "state",                        "Etat" },
+            { "statut",                       "Etat" },
+            { "etatglobal",                   "Etat" },
+            { "etatmateriel",                 "Etat" },
+
+            // SousEtat
+            { "sousetat",                     "SousEtat" },
+            { "substate",                     "SousEtat" },
+            { "substatus",                    "SousEtat" },
+            { "repriseenattente",             "SousEtat" },
+
+            // Entrepot
+            { "entrepot",                     "Entrepot" },
+            { "stockroom",                    "Entrepot" },
+            { "magasin",                      "Entrepot" },
+            { "emplacement",                  "Entrepot" },
+            { "location",                     "Entrepot" },
+            { "depot",                        "Entrepot" },
+            { "warehouse",                    "Entrepot" },
+
+            // Categorie
+            { "categoriedemodele",            "CategorieModele" },
+            { "categoriemodele",              "CategorieModele" },
+            { "categorie",                    "CategorieModele" },
+            { "modelcategory",                "CategorieModele" },
+            { "category",                     "CategorieModele" },
+
+            // Modele
+            { "modele",                       "Modele" },
+            { "model",                        "Modele" },
+            { "designation",                  "Modele" },
+
+            // Fabricant
+            { "fabricant",                    "Fabricant" },
+            { "manufacturer",                 "Fabricant" },
+            { "marque",                       "Fabricant" },
+            { "methodeacquisition",           "Fabricant" },
+            { "moyenneacquisition",           "Fabricant" },
+            { "acquisitionmethod",            "Fabricant" },
+            { "brand",                        "Fabricant" },
+            { "constructeur",                 "Fabricant" },
+
+            // RAM
+            { "ram",                          "RamGo" },
+            { "ramgo",                        "RamGo" },
+            { "memoire",                      "RamGo" },
+            { "memory",                       "RamGo" },
 
             // Date changement sous-état
-            { "datechangementsousetat", "DateChangementSousEtat" },
+            { "datechangementsousetat",       "DateChangementSousEtat" },
             { "datedernierchangementsousetat", "DateChangementSousEtat" },
-            { "lastsubstatechange",   "DateChangementSousEtat" },
+            { "datesousetat",                 "DateChangementSousEtat" },
+            { "lastsubstatechange",           "DateChangementSousEtat" },
+            { "lastupdate",                   "DateChangementSousEtat" },
+            { "datesubstate",                 "DateChangementSousEtat" },
+
+            // Description / commentaires de panne
+            { "description",                  "Description" },
+            { "commentaire",                  "Description" },
+            { "commentaires",                 "Description" },
+
+            // Non mappé (colonnes à ignorer)
+            { "justification",                "" },
+            { "expirationgarantie",           "" },
+            { "reservedpour",                 "" },
+            { "centredcouts",                 "" },
+            { "region",                       "" },
+            { "datemiseadisposition",         "" },
+            { "dateinventairephysique",       "" },
+            { "daterenouvellementmateriel",   "" },
+            { "datedernieretat",              "" },
+            { "organisation",                 "" },
+            { "organization",                 "" },
+            { "dateerenouvellement",          "" },
+            { "dateerenouvellementmateriel",  "" },
+            { "daterenouvellement",           "" },
+            { "renewaldate",                  "" },
         };
+
+        // Clés du HeaderMap triées par longueur décroissante (pour le fallback partiel)
+        private static readonly IReadOnlyList<KeyValuePair<string, string>> HeaderMapByLength =
+            HeaderMap.OrderByDescending(kv => kv.Key.Length).ToList();
 
         public XlsxLoadResult Load(string path)
         {
@@ -118,12 +168,19 @@ namespace SpiceChecker.Services
                 var headerCells = headerRow.CellsUsed().ToList();
                 var columnMapping = new Dictionary<int, string>(); // colNum -> propertyName
 
+                // Première passe : collecter tous les headers normalisés présents dans le fichier
+                var allNormalized = new HashSet<string>(
+                    headerCells.Select(c => Normalize(c.GetString())),
+                    StringComparer.Ordinal);
+
                 foreach (var cell in headerCells)
                 {
                     var raw = cell.GetString();
                     result.Headers.Add(raw);
                     var norm = Normalize(raw);
-                    if (HeaderMap.TryGetValue(norm, out var prop))
+                    var alreadyMapped = new HashSet<string>(columnMapping.Values, StringComparer.Ordinal);
+                    var prop = ResolveMapping(norm, alreadyMapped, allNormalized);
+                    if (!string.IsNullOrEmpty(prop))
                         columnMapping[cell.Address.ColumnNumber] = prop;
                 }
 
@@ -145,7 +202,11 @@ namespace SpiceChecker.Services
                         AssignValue(hw, kv.Value, cell);
                     }
 
-                    if (nonVide) result.Rows.Add(hw);
+                    if (nonVide)
+                    {
+                        ExtractFromModele(hw);
+                        result.Rows.Add(hw);
+                    }
                 }
             }
 
@@ -165,6 +226,7 @@ namespace SpiceChecker.Services
                 case "Fabricant": hw.Fabricant = cell.GetString().Trim(); break;
                 case "NumeroSerie": hw.NumeroSerie = cell.GetString().Trim(); break;
                 case "AffecteA": hw.AffecteA = cell.GetString().Trim(); break;
+                case "Description": hw.Description = cell.GetString().Trim(); break;
                 case "RamGo": hw.RamGo = ParseRam(cell); break;
                 case "DateChangementSousEtat":
                     hw.DateChangementSousEtat = ParseDate(cell);
@@ -198,6 +260,86 @@ namespace SpiceChecker.Services
             if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
                 return d;
             return null;
+        }
+
+        private static void ExtractFromModele(HardwareRow row)
+        {
+            if (row == null || string.IsNullOrWhiteSpace(row.Modele)) return;
+
+            var modele = row.Modele.ToUpperInvariant();
+
+            // -- FABRICANT --
+            if (string.IsNullOrWhiteSpace(row.Fabricant) || row.Fabricant == "?")
+            {
+                if (modele.Contains("LENOVO") || modele.Contains("THINKPAD") ||
+                    modele.Contains("THINKBOOK") || modele.Contains("LEGION"))
+                    row.Fabricant = "LENOVO";
+                else if (modele.Contains("DELL") || modele.Contains("LATITUDE") ||
+                         modele.Contains("XPS") || modele.Contains("OPTIPLEX") ||
+                         modele.Contains("PRECISION"))
+                    row.Fabricant = "DELL";
+                else if (modele.Contains("HP") || modele.Contains("ELITEBOOK") ||
+                         modele.Contains("PROBOOK") || modele.Contains("ZBOOK"))
+                    row.Fabricant = "HP";
+                else if (modele.Contains("ASUS"))
+                    row.Fabricant = "ASUS";
+                else if (modele.Contains("SAMSUNG"))
+                    row.Fabricant = "SAMSUNG";
+                else if (modele.Contains("ACER"))
+                    row.Fabricant = "ACER";
+                else if (modele.Contains("FUJITSU"))
+                    row.Fabricant = "FUJITSU";
+                else if (modele.Contains("PANASONIC"))
+                    row.Fabricant = "PANASONIC";
+            }
+
+            // -- RAM depuis modele (suffixe type "... I5 8", "... I7 32") --
+            if (!row.RamGo.HasValue)
+            {
+                var ramMatch = System.Text.RegularExpressions.Regex.Match(
+                    row.Modele,
+                    @"\b(I3|I5|I7|I9|R3|R5|R7|R9)\s+(\d{1,2})\b",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (ramMatch.Success &&
+                    double.TryParse(ramMatch.Groups[2].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var ramVal) &&
+                    ramVal > 0 && ramVal <= 128)
+                    row.RamGo = ramVal;
+            }
+        }
+
+        /// <summary>
+        /// Résout le mapping d'un header normalisé vers un nom de propriété.
+        /// Match exact en priorité, puis fallback partiel (clé la plus longue d'abord).
+        /// Gère l'ambiguïté « etat » : si SousEtat est couvert par une autre colonne,
+        /// « etat » seul est interprété comme Etat ; sinon comme SousEtat (compatibilité SPICE).
+        /// </summary>
+        private static string ResolveMapping(
+            string normalizedHeader,
+            HashSet<string> alreadyMappedProps,
+            HashSet<string> allNormalizedHeaders)
+        {
+            // Match exact
+            if (HeaderMap.TryGetValue(normalizedHeader, out var propName))
+            {
+                // Ambiguïté : "etat" peut désigner Etat ou SousEtat selon le fichier
+                if (normalizedHeader == "etat")
+                {
+                    bool sousEtatCoveredByOtherColumn =
+                        alreadyMappedProps.Contains("SousEtat") ||
+                        allNormalizedHeaders.Any(h => h != "etat" && HeaderMap.TryGetValue(h, out var p) && p == "SousEtat");
+                    return sousEtatCoveredByOtherColumn ? "Etat" : "SousEtat";
+                }
+                return propName;
+            }
+
+            // Fallback partiel : clé la plus longue (>= 4 chars) contenue dans le header
+            foreach (var kv in HeaderMapByLength)
+            {
+                if (kv.Key.Length >= 4 && normalizedHeader.Contains(kv.Key))
+                    return kv.Value;
+            }
+
+            return string.Empty;
         }
 
         /// <summary>

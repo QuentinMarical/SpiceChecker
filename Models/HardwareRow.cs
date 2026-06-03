@@ -14,7 +14,10 @@ namespace SpiceChecker.Models
         public double? RamGo { get; set; }
         public string NumeroSerie { get; set; } = "";
         public string AffecteA { get; set; } = "";
+        public string Description { get; set; } = "";
         public DateTime? DateChangementSousEtat { get; set; }
+        public DateTime? DateRenouvellement { get; set; }
+        public DateTime? DateSousEtat { get; set; }
 
         // Résultats du moteur de règles
         public string AnomalieMessage { get; set; } = "";
