@@ -58,6 +58,18 @@ namespace SpiceChecker
         // Pour l'impression
         private int _printRowIndex = 0;
 
+        private const int WM_GETMINMAXINFO = 0x0024;
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public System.Drawing.Point ptReserved;
+            public System.Drawing.Point ptMaxSize;
+            public System.Drawing.Point ptMaxPosition;
+            public System.Drawing.Point ptMinTrackSize;
+            public System.Drawing.Point ptMaxTrackSize;
+        }
+
         public MainForm()
         {
             InitializeComponent();
@@ -167,15 +179,21 @@ namespace SpiceChecker
             _toolbarPanel.Controls.Add(_toolbar);
 
             // Filtres
-            _filterPanelHost = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(0) };
+            _filterPanelHost = new Panel
+            {
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Padding = new Padding(0)
+            };
             _filterPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
-                Height = 40,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Padding = new Padding(6, 4, 6, 4),
                 RowCount = 1,
-                ColumnCount = 13,
-                AutoSize = false
+                ColumnCount = 13
             };
 
             for (int i = 0; i < 13; i++)
@@ -248,16 +266,7 @@ namespace SpiceChecker
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
                 RowHeadersVisible = false,
                 BackgroundColor = SystemColors.Window,
-                BorderStyle = BorderStyle.None,
-                DefaultCellStyle = new DataGridViewCellStyle
-                {
-                    BackColor = SystemColors.Window,
-                    Font = new Font("Segoe UI", 9F, FontStyle.Regular)
-                },
-                AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
-                {
-                    BackColor = Color.FromArgb(247, 247, 247)
-                }
+                BorderStyle = BorderStyle.None
             };
             ConfigureColumns();
             _bs.DataSource = _view;
@@ -283,6 +292,17 @@ namespace SpiceChecker
             _status.Items.Add(_lblCountOk);
 
             _filterPanelHost.Controls.Add(_filterPanel);
+
+            _toolbarPanel.Paint += (s, e) =>
+            {
+                using var p = new Pen(_currentTheme.BorderColor);
+                e.Graphics.DrawLine(p, 0, _toolbarPanel.Height - 1, _toolbarPanel.Width, _toolbarPanel.Height - 1);
+            };
+            _filterPanelHost.Paint += (s, e) =>
+            {
+                using var p = new Pen(_currentTheme.BorderColor);
+                e.Graphics.DrawLine(p, 0, _filterPanelHost.Height - 1, _filterPanelHost.Width, _filterPanelHost.Height - 1);
+            };
 
             Controls.Add(_grid);
             Controls.Add(_filterPanelHost);
@@ -407,9 +427,6 @@ namespace SpiceChecker
             Add("SousEtatConseille", "Conseil", 150);
 
             _grid.EnableHeadersVisualStyles = false;
-            _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(45, 45, 48);
-            _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-            _grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
             _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
             _grid.ColumnHeadersHeight = 30;
         }
@@ -1146,6 +1163,28 @@ namespace SpiceChecker
                     }
                     break;
             }
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_GETMINMAXINFO)
+            {
+                var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(m.LParam);
+                var screen = Screen.FromHandle(Handle);
+                var workArea = screen.WorkingArea;
+
+                mmi.ptMaxPosition.X = workArea.Left;
+                mmi.ptMaxPosition.Y = workArea.Top;
+                mmi.ptMaxSize.X = workArea.Width;
+                mmi.ptMaxSize.Y = workArea.Height;
+                mmi.ptMaxTrackSize.X = workArea.Width;
+                mmi.ptMaxTrackSize.Y = workArea.Height;
+
+                System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, m.LParam, true);
+                return;
+            }
+
+            base.WndProc(ref m);
         }
     }
 }
