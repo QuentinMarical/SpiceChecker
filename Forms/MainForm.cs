@@ -9,9 +9,12 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using ClosedXML.Excel;
+using SpiceChecker.Forms;
 using SpiceChecker.Models;
 using SpiceChecker.Rules;
 using SpiceChecker.Services;
+using ThemeDefinition = SpiceChecker.Models.AppTheme;
+using WinFormsAppTheme = SpiceChecker.Services.AppTheme;
 
 namespace SpiceChecker
 {
@@ -25,14 +28,17 @@ namespace SpiceChecker
         private readonly BindingSource _bs = new BindingSource();
 
         // Toolbar
+        private Panel _toolbarPanel = null!;
         private ToolStrip _toolbar = null!;
         private ToolStripButton _btnOpen = null!, _btnExport = null!, _btnExportXlsx = null!, _btnPrint = null!, _btnCopy = null!, _btnAbout = null!;
         private ToolStripLabel _lblSource = null!, _lblTheme = null!;
         private ToolStripComboBox _cbTheme = null!;
-        private SettingsService.AppSettings _settings = SettingsService.Load();
-        private static AppTheme _savedTheme = AppTheme.FluentLight;
+        private readonly SettingsService.AppSettings _settings = SettingsService.Load();
+        private ThemeDefinition _currentTheme = ThemeCatalog.GetTheme(ThemeId.Fluent11Dark);
+        private CustomTitleBar _titleBar = null!;
 
         // Filtres
+        private Panel _filterPanelHost = null!;
         private TableLayoutPanel _filterPanel = null!;
         private TextBox _txtSearch = null!;
         private ComboBox _cbSousEtat = null!, _cbCategorie = null!, _cbFabricant = null!, _cbModele = null!;
@@ -40,7 +46,7 @@ namespace SpiceChecker
         private Label _lblCount = null!;
 
         // Grille + statut
-        private Panel _titleBarPanel = null!;
+        private readonly Panel _titleBarPanel = new Panel();
         public Panel TitleBarPanel => _titleBarPanel;
         private DataGridView _grid = null!;
         private StatusStrip _status = null!;
@@ -59,34 +65,27 @@ namespace SpiceChecker
             BuildUi();
             WireEvents();
             UpdateCount();
-
-            var initialTheme = ThemeManager.ParseThemeName(_settings.LastTheme);
-            ThemeManager.Apply(initialTheme, this);
-            _savedTheme = initialTheme;
-            var themeIndex = (int)initialTheme;
-            if (_cbTheme.SelectedIndex != themeIndex)
-            {
-                _cbTheme.SelectedIndex = themeIndex;
-            }
+            InitializeTitleBarAndTheme();
         }
 
         private void ConfigureMainForm()
         {
-            this.AutoScaleDimensions = new SizeF(7F, 15F);
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.ClientSize = new Size(1280, 760);
-            this.Name = "MainForm";
-            this.Text = "Spice Checker — Analyse stock SPICE";
-            this.StartPosition = FormStartPosition.CenterScreen;
-            this.AllowDrop = true;
-            this.MinimumSize = new Size(960, 540);
+            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleMode = AutoScaleMode.Font;
+            ClientSize = new Size(1280, 760);
+            Name = "MainForm";
+            Text = "Spice Checker — Analyse stock SPICE";
+            StartPosition = FormStartPosition.CenterScreen;
+            AllowDrop = true;
+            MinimumSize = new Size(960, 540);
+            FormBorderStyle = FormBorderStyle.None;
         }
 
         private void BuildUi()
         {
             // Toolbar
-            _toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden };
-            _titleBarPanel = new Panel { Dock = DockStyle.Top, Height = 0, Visible = false };
+            _toolbarPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0) };
+            _toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Fill };
             _btnOpen = new ToolStripButton("Ouvrir XLSX...");
             _btnExport = new ToolStripButton("Export CSV") { Enabled = false };
             _btnExportXlsx = new ToolStripButton("Export XLSX") { Enabled = false };
@@ -111,7 +110,6 @@ namespace SpiceChecker
                 "Fluent 11 (clair)",
                 "Fluent 11 (sombre)"
             });
-            _cbTheme.SelectedIndex = (int)AppTheme.FluentLight;
 
             try
             {
@@ -166,8 +164,10 @@ namespace SpiceChecker
                 new ToolStripSeparator { Alignment = ToolStripItemAlignment.Right }, _cbTheme, _lblTheme,
                 new ToolStripSeparator(), _lblSource
             });
+            _toolbarPanel.Controls.Add(_toolbar);
 
             // Filtres
+            _filterPanelHost = new Panel { Dock = DockStyle.Top, Height = 40, Padding = new Padding(0) };
             _filterPanel = new TableLayoutPanel
             {
                 Dock = DockStyle.Top,
@@ -282,11 +282,92 @@ namespace SpiceChecker
             _status.Items.Add(new ToolStripSeparator());
             _status.Items.Add(_lblCountOk);
 
+            _filterPanelHost.Controls.Add(_filterPanel);
+
             Controls.Add(_grid);
-            Controls.Add(_filterPanel);
-            Controls.Add(_toolbar);
+            Controls.Add(_filterPanelHost);
+            Controls.Add(_toolbarPanel);
             Controls.Add(_status);
-            Controls.Add(_titleBarPanel);
+        }
+
+        private void InitializeTitleBarAndTheme()
+        {
+            if (!Enum.TryParse<ThemeId>(_settings.LastTheme, true, out var savedThemeId))
+            {
+                savedThemeId = _settings.LastTheme switch
+                {
+                    nameof(WinFormsAppTheme.Legacy95) => ThemeId.Legacy95,
+                    nameof(WinFormsAppTheme.LunaXP) => ThemeId.LunaXP,
+                    nameof(WinFormsAppTheme.AeroSeven) => ThemeId.Aero7,
+                    nameof(WinFormsAppTheme.ModernLight) => ThemeId.ModernLight,
+                    nameof(WinFormsAppTheme.ModernDark) => ThemeId.ModernDark,
+                    nameof(WinFormsAppTheme.FluentLight) => ThemeId.Fluent11Light,
+                    nameof(WinFormsAppTheme.FluentDark) => ThemeId.Fluent11Dark,
+                    _ => ThemeId.Fluent11Dark
+                };
+            }
+
+            _currentTheme = ThemeCatalog.GetTheme(savedThemeId);
+            EnsureCustomTitleBar();
+
+            if (_cbTheme.SelectedIndex != (int)_currentTheme.Id)
+            {
+                _cbTheme.SelectedIndex = (int)_currentTheme.Id;
+            }
+
+            ApplyCurrentTheme();
+        }
+
+        private void EnsureCustomTitleBar()
+        {
+            if (_titleBar == null)
+            {
+                _titleBar = new CustomTitleBar();
+                _titleBar.Initialize(this, _currentTheme, "Spice Checker — Analyse stock SPICE");
+                _titleBar.CloseClicked += (s, _) => Application.Exit();
+                _titleBar.MinimizeClicked += (s, _) => WindowState = FormWindowState.Minimized;
+                _titleBar.MaximizeClicked += (s, _) =>
+                    WindowState = WindowState == FormWindowState.Maximized
+                        ? FormWindowState.Normal
+                        : FormWindowState.Maximized;
+            }
+
+            if (!Controls.Contains(_titleBar))
+            {
+                Controls.Add(_titleBar);
+            }
+
+            _titleBar.Visible = true;
+            _titleBar.Dock = DockStyle.Top;
+        }
+
+        private void EnsureTopDockOrder()
+        {
+            SuspendLayout();
+            try
+            {
+                if (Controls.Contains(_filterPanelHost)) Controls.SetChildIndex(_filterPanelHost, Controls.Count - 1);
+                if (Controls.Contains(_toolbarPanel)) Controls.SetChildIndex(_toolbarPanel, Controls.Count - 1);
+                if (Controls.Contains(_titleBar)) Controls.SetChildIndex(_titleBar, Controls.Count - 1);
+            }
+            finally
+            {
+                ResumeLayout(true);
+            }
+        }
+
+        private void ApplyCurrentTheme()
+        {
+            EnsureCustomTitleBar();
+            _titleBar.ApplyTheme(_currentTheme);
+            ThemeApplier.Apply(this, _currentTheme, _grid, _toolbarPanel, _filterPanelHost, _toolbar);
+
+            Padding = _currentTheme.HasOuterBorder3D
+                ? new Padding(2)
+                : new Padding(1);
+
+            EnsureTopDockOrder();
+            Invalidate();
         }
 
         private void ConfigureColumns()
@@ -358,21 +439,14 @@ namespace SpiceChecker
             _chkAnomaliesOnly.CheckedChanged += (s, e) => ApplyFilters();
             _cbTheme.SelectedIndexChanged += (s, e) =>
             {
-                var selectedTheme = _cbTheme.SelectedIndex switch
+                if (_cbTheme.SelectedIndex < 0)
                 {
-                    0 => AppTheme.Legacy95,
-                    1 => AppTheme.LunaXP,
-                    2 => AppTheme.AeroSeven,
-                    3 => AppTheme.ModernLight,
-                    4 => AppTheme.ModernDark,
-                    5 => AppTheme.FluentLight,
-                    6 => AppTheme.FluentDark,
-                    _ => AppTheme.FluentLight
-                };
+                    return;
+                }
 
-                ThemeManager.Apply(selectedTheme, this);
-                _savedTheme = selectedTheme;
-                _settings.LastTheme = selectedTheme.ToString();
+                _currentTheme = ThemeCatalog.GetTheme((ThemeId)_cbTheme.SelectedIndex);
+                ApplyCurrentTheme();
+                _settings.LastTheme = _currentTheme.Id.ToString();
                 SettingsService.Save(_settings);
             };
 
@@ -1020,6 +1094,58 @@ namespace SpiceChecker
             }
 
             e.HasMorePages = _printRowIndex < _view.Count;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+
+            if (_currentTheme.HasOuterBorder3D)
+            {
+                ControlPaint.DrawBorder3D(e.Graphics,
+                    new Rectangle(0, 0, Width, Height),
+                    Border3DStyle.Raised);
+                return;
+            }
+
+            switch (_currentTheme.Id)
+            {
+                case ThemeId.Aero7:
+                    using (var outer = new Pen(Color.FromArgb(110, 150, 205), 1f))
+                    using (var inner = new Pen(Color.FromArgb(180, 225, 245), 1f))
+                    {
+                        e.Graphics.DrawRectangle(outer, 0, 0, Width - 1, Height - 1);
+                        e.Graphics.DrawRectangle(inner, 1, 1, Width - 3, Height - 3);
+                    }
+                    break;
+
+                case ThemeId.ModernLight:
+                case ThemeId.ModernDark:
+                    using (var border = new Pen(_currentTheme.BorderColor, 1f))
+                    using (var accent = new Pen(Color.FromArgb(180, _currentTheme.AccentColor), 1f))
+                    {
+                        e.Graphics.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
+                        e.Graphics.DrawLine(accent, 0, 0, Width - 1, 0);
+                    }
+                    break;
+
+                case ThemeId.Fluent11Light:
+                case ThemeId.Fluent11Dark:
+                    using (var border = new Pen(Color.FromArgb(190, _currentTheme.BorderColor), 1f))
+                    using (var glow = new Pen(Color.FromArgb(80, _currentTheme.AccentColor), 1f))
+                    {
+                        e.Graphics.DrawRectangle(border, 0, 0, Width - 1, Height - 1);
+                        e.Graphics.DrawRectangle(glow, 1, 1, Width - 3, Height - 3);
+                    }
+                    break;
+
+                default:
+                    using (var pen = new Pen(_currentTheme.BorderColor))
+                    {
+                        e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+                    }
+                    break;
+            }
         }
     }
 }
