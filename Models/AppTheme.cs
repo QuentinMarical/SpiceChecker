@@ -1,4 +1,5 @@
 using System.Drawing;
+using SpiceChecker.Services;
 
 namespace SpiceChecker.Models
 {
@@ -17,6 +18,11 @@ namespace SpiceChecker.Models
 
     public class AppTheme
     {
+        private Color _formBackground = Color.FromArgb(220, 243, 243, 243);
+        private Color _toolbarBackground = Color.FromArgb(220, 243, 243, 243);
+        private Color _filterBarBackground = Color.FromArgb(220, 243, 243, 243);
+        private Color _gridBackground = Color.FromArgb(220, 243, 243, 243);
+
         public ThemeId Id { get; set; }
         public string DisplayName { get; set; } = "";
 
@@ -30,10 +36,40 @@ namespace SpiceChecker.Models
         public Color TitleButtonCloseBg { get; set; } = Color.FromArgb(196, 43, 28);
         public bool TitleButtonsIsOldStyle { get; set; } = false;
 
-        public Color FormBackground { get; set; }
-        public Color ToolbarBackground { get; set; }
-        public Color FilterBarBackground { get; set; }
-        public Color GridBackground { get; set; }
+        public Color FormBackground
+        {
+            get => _formBackground;
+            set => _formBackground = value.IsEmpty
+                ? Color.FromArgb(220, 243, 243, 243)
+                : ColorHelper.EnsureMinAlpha(value, 30);
+        }
+
+        public Color ToolbarBackground
+        {
+            get => _toolbarBackground;
+            set => _toolbarBackground = value.IsEmpty
+                ? FormBackground
+                : ColorHelper.EnsureMinAlpha(value, 30);
+        }
+
+        public Color FilterBarBackground
+        {
+            get => _filterBarBackground;
+            set => _filterBarBackground = value.IsEmpty
+                ? FormBackground
+                : ColorHelper.EnsureMinAlpha(value, 30);
+        }
+
+        public Color GridBackground
+        {
+            get => _gridBackground;
+            set => _gridBackground = value.IsEmpty
+                ? FormBackground
+                : ColorHelper.EnsureMinAlpha(value, 30);
+        }
+
+        public Color BackgroundColor => GridBackground;
+
         public Color GridAlternateRow { get; set; }
         public Color GridSelectionBackground { get; set; }
         public Color GridSelectionForeground { get; set; }

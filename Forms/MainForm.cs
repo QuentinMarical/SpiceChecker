@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using ClosedXML.Excel;
+using SpiceChecker.Controls;
 using SpiceChecker.Forms;
 using SpiceChecker.Models;
 using SpiceChecker.Rules;
@@ -48,7 +49,7 @@ namespace SpiceChecker
         // Grille + statut
         private readonly Panel _titleBarPanel = new Panel();
         public Panel TitleBarPanel => _titleBarPanel;
-        private DataGridView _grid = null!;
+        private TransparentDataGridView _grid = null!;
         private StatusStrip _status = null!;
         private ToolStripStatusLabel _statusLabel = null!;
         private ToolStripStatusLabel _lblCountErreur = null!, _lblCountAvert = null!, _lblCountOk = null!;
@@ -97,7 +98,7 @@ namespace SpiceChecker
         private void BuildUi()
         {
             // Toolbar
-            _toolbarPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0), BackColor = Color.Transparent };
+            _toolbarPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0), BackColor = ColorHelper.EnsureMinAlpha(Color.Transparent, 30) };
             _toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Fill };
             _btnOpen = new ToolStripButton("Ouvrir XLSX...");
             _btnExport = new ToolStripButton("Export CSV") { Enabled = false };
@@ -257,7 +258,7 @@ namespace SpiceChecker
             _filterPanel.Controls.Add(_lblCount, 12, 0);
 
             // Grille
-            _grid = new DataGridView
+            _grid = new TransparentDataGridView
             {
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
@@ -268,10 +269,10 @@ namespace SpiceChecker
                 AutoGenerateColumns = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
                 RowHeadersVisible = false,
-                BackgroundColor = Color.Transparent,
+                BackgroundColor = _currentTheme.BackgroundColor,
                 BorderStyle = BorderStyle.None
             };
-            _grid.DefaultCellStyle.BackColor = Color.FromArgb(0, 0, 0, 0);
+            _grid.DefaultCellStyle.BackColor = _currentTheme.BackgroundColor;
             ConfigureColumns();
             _bs.DataSource = _view;
             _grid.DataSource = _bs;
@@ -492,7 +493,11 @@ namespace SpiceChecker
 
             _txtSearch.TextChanged += (s, e) => ApplyFilters();
             _cbSousEtat.SelectedIndexChanged += (s, e) => ApplyFilters();
-            _cbCategorie.SelectedIndexChanged += (s, e) => ApplyFilters();
+            _cbCategorie.SelectedIndexChanged += (s, e) =>
+            {
+                RebuildModeleDropdown();
+                ApplyFilters();
+            };
             _cbFabricant.SelectedIndexChanged += (s, e) =>
             {
                 RebuildModeleDropdown();

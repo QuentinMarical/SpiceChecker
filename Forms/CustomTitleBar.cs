@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using SpiceChecker.Models;
+using SpiceChecker.Services;
 using ThemeDefinition = SpiceChecker.Models.AppTheme;
 
 namespace SpiceChecker.Forms
@@ -77,8 +78,8 @@ namespace SpiceChecker.Forms
                     int glossH = Math.Max(1, h * 2 / 5);
                     using (var glossBrush = new LinearGradientBrush(
                         new Rectangle(0, 0, w, glossH + 1),
-                        Color.FromArgb(140, 255, 255, 255),
-                        Color.FromArgb(0, 255, 255, 255),
+                        ColorHelper.EnsureMinAlpha(Color.FromArgb(140, 255, 255, 255), 30),
+                        ColorHelper.EnsureMinAlpha(Color.FromArgb(0, 255, 255, 255), 30),
                         LinearGradientMode.Vertical))
                     {
                         g.FillRectangle(glossBrush, 0, 0, w, glossH);
@@ -87,8 +88,8 @@ namespace SpiceChecker.Forms
                     // Couche 3 : reflet lumineux bas (bord interne lumineux)
                     using (var bottomGlow = new LinearGradientBrush(
                         new Rectangle(0, h - 6, w, 6),
-                        Color.FromArgb(0, 255, 255, 255),
-                        Color.FromArgb(60, 255, 255, 255),
+                        ColorHelper.EnsureMinAlpha(Color.FromArgb(0, 255, 255, 255), 30),
+                        ColorHelper.EnsureMinAlpha(Color.FromArgb(60, 255, 255, 255), 30),
                         LinearGradientMode.Vertical))
                     {
                         g.FillRectangle(bottomGlow, 0, h - 6, w, 6);
@@ -129,8 +130,8 @@ namespace SpiceChecker.Forms
                     }
                     using (var accentGlow = new LinearGradientBrush(
                         new Rectangle(0, 0, w, Math.Max(1, h / 3)),
-                        Color.FromArgb(18, _theme.AccentColor),
-                        Color.FromArgb(0, _theme.AccentColor),
+                        ColorHelper.EnsureMinAlpha(Color.FromArgb(18, _theme.AccentColor), 30),
+                        ColorHelper.EnsureMinAlpha(Color.FromArgb(0, _theme.AccentColor), 30),
                         LinearGradientMode.Vertical))
                     {
                         g.FillRectangle(accentGlow, 0, 0, w, h / 3);
