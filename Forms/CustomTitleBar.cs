@@ -58,23 +58,44 @@ namespace SpiceChecker.Forms
             switch (_theme.Id)
             {
                 case ThemeId.Aero7:
-                    using (var aeroBase = new LinearGradientBrush(
+                {
+                    // Couche 1 : fond bleu-gris glacé (simule le reflet du bureau)
+                    using (var bgBrush = new LinearGradientBrush(
                         new Rectangle(0, 0, w, h),
-                        _theme.TitleBarColor,
-                        _theme.TitleBarGradientEnd,
+                        Color.FromArgb(168, 191, 220),
+                        Color.FromArgb(196, 218, 240),
                         LinearGradientMode.Vertical))
                     {
-                        g.FillRectangle(aeroBase, 0, 0, w, h);
+                        g.FillRectangle(bgBrush, 0, 0, w, h);
                     }
-                    using (var gloss = new LinearGradientBrush(
-                        new Rectangle(0, 0, w, Math.Max(1, h / 2)),
-                        Color.FromArgb(150, 255, 255, 255),
+
+                    // Couche 2 : brillance blanche sur le tiers supérieur (effet vitre)
+                    int glossH = Math.Max(1, h * 2 / 5);
+                    using (var glossBrush = new LinearGradientBrush(
+                        new Rectangle(0, 0, w, glossH + 1),
+                        Color.FromArgb(140, 255, 255, 255),
                         Color.FromArgb(0, 255, 255, 255),
                         LinearGradientMode.Vertical))
                     {
-                        g.FillRectangle(gloss, 0, 0, w, h / 2);
+                        g.FillRectangle(glossBrush, 0, 0, w, glossH);
                     }
+
+                    // Couche 3 : reflet lumineux bas (bord interne lumineux)
+                    using (var bottomGlow = new LinearGradientBrush(
+                        new Rectangle(0, h - 6, w, 6),
+                        Color.FromArgb(0, 255, 255, 255),
+                        Color.FromArgb(60, 255, 255, 255),
+                        LinearGradientMode.Vertical))
+                    {
+                        g.FillRectangle(bottomGlow, 0, h - 6, w, 6);
+                    }
+
+                    // Couche 4 : fine ligne bleue de brillance tout en haut (1px)
+                    using (var topLine = new Pen(Color.FromArgb(180, 220, 240, 255), 1f))
+                        g.DrawLine(topLine, 0, 0, w, 0);
+
                     break;
+                }
 
                 case ThemeId.ModernLight:
                 case ThemeId.ModernDark:
@@ -96,15 +117,15 @@ namespace SpiceChecker.Forms
                     }
                     using (var micaOverlay = new LinearGradientBrush(
                         new Rectangle(0, 0, w, h),
-                        Color.FromArgb(55, 255, 255, 255),
-                        Color.FromArgb(10, 255, 255, 255),
+                        Color.FromArgb(30, 255, 255, 255),
+                        Color.FromArgb(5, 255, 255, 255),
                         LinearGradientMode.Vertical))
                     {
                         g.FillRectangle(micaOverlay, 0, 0, w, h);
                     }
                     using (var accentGlow = new LinearGradientBrush(
                         new Rectangle(0, 0, w, Math.Max(1, h / 3)),
-                        Color.FromArgb(50, _theme.AccentColor),
+                        Color.FromArgb(18, _theme.AccentColor),
                         Color.FromArgb(0, _theme.AccentColor),
                         LinearGradientMode.Vertical))
                     {

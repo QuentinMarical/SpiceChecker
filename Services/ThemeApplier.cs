@@ -40,6 +40,23 @@ namespace SpiceChecker.Services
             grid.ColumnHeadersDefaultCellStyle.Font = new Font(theme.BaseFont, FontStyle.Bold);
             grid.GridColor = theme.BorderColor;
             grid.BorderStyle = theme.HasOuterBorder3D ? BorderStyle.Fixed3D : BorderStyle.FixedSingle;
+
+            // ── Effet DWM backdrop ────────────────────────────────────────────
+            // DWM compose l'effet derrière la fenêtre ; GDI peint normalement par-dessus.
+            // On ne touche pas BackColor avec Color.Black ni TransparencyKey.
+            if (form.IsHandleCreated)
+            {
+                DwmHelper.SetTitleBarDarkMode(form.Handle, theme.IsDark);
+                DwmHelper.ApplyBestEffect(form.Handle, theme.Backdrop, theme.BackdropFallbackTint);
+            }
+            else
+            {
+                form.HandleCreated += (s, e) =>
+                {
+                    DwmHelper.SetTitleBarDarkMode(form.Handle, theme.IsDark);
+                    DwmHelper.ApplyBestEffect(form.Handle, theme.Backdrop, theme.BackdropFallbackTint);
+                };
+            }
         }
 
         private static void ApplyToControls(Control parent, ThemeDefinition theme)

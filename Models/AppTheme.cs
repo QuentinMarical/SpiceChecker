@@ -2,6 +2,8 @@ using System.Drawing;
 
 namespace SpiceChecker.Models
 {
+    public enum BackdropEffect { None, Mica, Acrylic, Tabbed }
+
     public enum ThemeId
     {
         Legacy95,
@@ -58,5 +60,10 @@ namespace SpiceChecker.Models
 
         public Color AccentColor { get; set; }
         public Color SeparatorColor { get; set; }
+
+        public BackdropEffect Backdrop { get; init; } = BackdropEffect.None;
+        public Color BackdropFallbackTint { get; init; } = Color.FromArgb(200, 32, 32, 32);
+
+        public bool IsDark => Id is ThemeId.ModernDark or ThemeId.Fluent11Dark;
     }
 }

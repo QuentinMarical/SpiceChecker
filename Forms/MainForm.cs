@@ -508,6 +508,12 @@ namespace SpiceChecker
             };
         }
 
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            DwmHelper.SetTitleBarDarkMode(Handle, _currentTheme.IsDark);
+        }
+
         // ==================================================================
         //  Chargement XLSX
         // ==================================================================
