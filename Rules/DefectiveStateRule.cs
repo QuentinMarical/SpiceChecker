@@ -12,6 +12,7 @@ namespace SpiceChecker.Rules
     public class DefectiveStateRule : IRule
     {
         public string Nom => "État défectueux ignoré";
+        public bool IsOverride => false;
 
         private static readonly string[] _termsDefectueux = new[]
         {

@@ -3,54 +3,57 @@
 namespace SpiceChecker.Rules
 {
     /// <summary>
-    /// Règle 1 — Lenovo portable avec RAM >= ³² Go en statut "disponible" (Re-Use, Disponible neuf,
-    /// ou équivalent). Anomalie si non validé par l'asset management.
-    /// Sous-états "disponibles" pris en compte : Disponible Re-Use, Disponible neuf, Dispo neuf,
-    /// Re-use, Reprise en attente (statut transitoire acceptable mais à surveiller).
+    /// Règle 1 — Override global : Lenovo 16/32 Go catégorie Ordinateur.
+    /// Si IsAnomaly = false, les autres règles ne s'appliquent pas pour cette ligne.
     /// </summary>
     public class HighRamLenovoRule : IRule
     {
         public string Nom => "Lenovo haute RAM";
-
-        private static readonly string[] _sousEtatsViseE = new[]
-        {
-            "Disponible Re-Use", "Disponible neuf", "Dispo neuf",
-            "Re-use", "Reuse", "Reprise en attente"
-        };
+        public bool IsOverride => true;
 
         public EvaluationResult Evaluate(HardwareRow row)
         {
             if (row == null) return EvaluationResult.Ok();
 
-            var fabricant = (row.Fabricant ?? "").ToLowerInvariant();
-            var modele    = (row.Modele    ?? "").ToLowerInvariant();
-            var sousEtat  = (row.SousEtat  ?? "").ToLowerInvariant();
+            bool estLenovo = row.Fabricant?.Contains("lenovo", StringComparison.OrdinalIgnoreCase) == true;
+            bool ramCiblee = row.RamGo.HasValue && (row.RamGo.Value == 16 || row.RamGo.Value == 32);
+            bool estOrdinateur = row.CategorieModele?.Contains("ordinateur", StringComparison.OrdinalIgnoreCase) == true;
 
-            // Est-ce un Lenovo (ThinkPad, ThinkBook, Legion comptent)
-            bool estLenovo = fabricant.Contains("lenovo")
-                          || modele.Contains("lenovo")
-                          || modele.Contains("thinkpad")
-                          || modele.Contains("thinkbook")
-                          || modele.Contains("legion");
+            if (!estLenovo || !ramCiblee || !estOrdinateur)
+                return EvaluationResult.Ok();
 
-            bool ramElevee = row.RamGo.HasValue && row.RamGo.Value >= 32;
+            bool estDefectueux = row.SousEtat?.Contains("défectueux", StringComparison.OrdinalIgnoreCase) == true;
+            bool estRevalorisation = row.SousEtat?.Contains("revalorisation", StringComparison.OrdinalIgnoreCase) == true;
 
-            bool sousEtatVisé = false;
-            foreach (var se in _sousEtatsViseE)
-                if (sousEtat.Contains(se.ToLowerInvariant())) { sousEtatVisé = true; break; }
-
-            if (estLenovo && ramElevee && sousEtatVisé)
+            if (estDefectueux)
             {
                 return new EvaluationResult
                 {
                     EstAnomalie = true,
-                    Niveau = NiveauAnomalie.Avertissement,
-                    Message = $"Lenovo {row.RamGo} Go en \"{row.SousEtat}\" — à valider (asset management)",
-                    SousEtatConseille = "Réservé / À valider"
+                    Niveau = NiveauAnomalie.Erreur,
+                    Message = $"Lenovo {row.RamGo} Go défectueux → doit aller en Réparation, jamais en Revalorisation",
+                    SousEtatConseille = "Classer en Réparation"
                 };
             }
 
-            return EvaluationResult.Ok();
+            if (estRevalorisation)
+            {
+                return new EvaluationResult
+                {
+                    EstAnomalie = true,
+                    Niveau = NiveauAnomalie.Erreur,
+                    Message = $"Lenovo {row.RamGo} Go ne doit jamais être en Revalorisation (matériel stratégique)",
+                    SousEtatConseille = "Classer en Disponible Re-Use"
+                };
+            }
+
+            // Fonctionnel, Re-Use, etc. → override : on bloque les règles suivantes
+            return new EvaluationResult
+            {
+                EstAnomalie = false,
+                Niveau = NiveauAnomalie.OK,
+                Message = $"Lenovo {row.RamGo} Go OK → Disponible Re-Use"
+            };
         }
     }
 }

@@ -12,8 +12,9 @@ namespace SpiceChecker.Rules
         {
             _rules.Add(new HighRamLenovoRule());
             _rules.Add(new DefectiveStateRule());
+            _rules.Add(new RevalorisationSansDefautRule());
             _rules.Add(new RevalorisationRule());
-            _rules.Add(new L13L14RenewalRule());  // ← AJOUT : Règle L13/L14 8 Go avec logique date renouvellement
+            _rules.Add(new L13L14RenewalRule());
             _rules.Add(new StaleSubstateRule());
         }
 
@@ -48,6 +49,9 @@ namespace SpiceChecker.Rules
                     row.SousEtatConseille = result.SousEtatConseille;
                     return; // première règle qui matche → on s'arrête
                 }
+                // Override global : si la règle correspond et n'est pas anomalie, stopper les règles suivantes
+                if (rule.IsOverride && !string.IsNullOrEmpty(result.Message))
+                    return;
             }
         }
 

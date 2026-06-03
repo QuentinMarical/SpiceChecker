@@ -1,308 +1,182 @@
-﻿using System;
-using System.Text.RegularExpressions;
-using SpiceChecker.Models;
+﻿using SpiceChecker.Models;
+using SpiceChecker.Services;
 
 namespace SpiceChecker.Rules
 {
     /// <summary>
-    /// Règle métier : Lenovo L13 G1 / L13 G2 / L14 (8 Go RAM) avec logique date de renouvellement.
-    /// Directive Protois Jérémy / Econocom — post 01/04/2026
-    /// 
-    /// Table de décision :
-    /// - L13 G1 / 8 Go / Fonctionnel → Disponible Re-Use
-    /// - L13 G1 / 8 Go / Défectueux → Revalorisation (toujours)
-    /// - L13 G2 / 8 Go / Fonctionnel → Disponible Re-Use
-    /// - L13 G2 / 8 Go / Défectueux / Renouv. ≤ 2027 → Revalorisation
-    /// - L13 G2 / 8 Go / Défectueux / Renouv. ≥ 2028 → Réparation
-    /// - L14 / 8 Go / Fonctionnel → Disponible Re-Use
-    /// - L14 / 8 Go / Défectueux / Renouv. ≤ 2027 → Revalorisation
-    /// - L14 / 8 Go / Défectueux / Renouv. ≥ 2028 → Réparation
+    /// Règle 2 — Lenovo L13 G1 / L13 G2 / L14 (8 Go RAM) avec logique date de renouvellement.
     /// </summary>
     public class L13L14RenewalRule : IRule
     {
         public string Nom => "L13L14-Renouvellement";
+        public bool IsOverride => false;
 
-        // Expressions régulières pour détecter les modèles
-        private static readonly Regex L13G1Pattern = new Regex(
-            @"thinkpad\s*(l13|l-13)\s*(g1|gen1|1(?:e|er|ère)\s*g(?:é|e)n(?:é|e)ration?)",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly Regex L13G2Pattern = new Regex(
-            @"thinkpad\s*(l13|l-13)\s*(g2|gen2|2(?:e|d)(?:e|è)me?\s*g(?:é|e)n(?:é|e)ration?)",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly Regex L14Pattern = new Regex(
-            @"thinkpad\s*(l14|l-14)",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        // Codes produits ThinkPad alternatifs
-        private static readonly Regex L13G1AltPattern = new Regex(
-            @"20u[1-9]\d|20ug",  // Codes produits ThinkPad L13 G1
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly Regex L13G2AltPattern = new Regex(
-            @"21b[1-9]\d|21ba|21bb",  // Codes produits ThinkPad L13 G2
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly Regex L14G1AltPattern = new Regex(
-            @"20u[1-9]\d|20u5|20u6|20u9",  // Codes produits ThinkPad L14 G1
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        private static readonly Regex L14G2AltPattern = new Regex(
-            @"20x[1-9]\d|20x2|20x3",  // Codes produits ThinkPad L14 G2
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly string[] _suffixesG1 = { "21RB", "21RE", "21RC", "21RD" };
 
         public EvaluationResult Evaluate(HardwareRow row)
         {
             if (row == null) return EvaluationResult.Ok();
 
-            // Seulement les Lenovo avec 8 Go RAM
-            bool isLenovo = !string.IsNullOrEmpty(row.Fabricant) &&
-                            row.Fabricant.IndexOf("lenovo", StringComparison.OrdinalIgnoreCase) >= 0;
-            if (!isLenovo) return EvaluationResult.Ok();
+            bool estLenovo = row.Fabricant?.Contains("lenovo", StringComparison.OrdinalIgnoreCase) == true;
+            if (!estLenovo) return EvaluationResult.Ok();
 
-            bool is8GbRam = row.RamGo.HasValue && row.RamGo.Value == 8;
-            if (!is8GbRam) return EvaluationResult.Ok();
+            bool is8Go = row.RamGo.HasValue && row.RamGo.Value == 8;
+            if (!is8Go) return EvaluationResult.Ok();
 
-            // Le matériel doit être un L13 G1, L13 G2, ou L14
-            if (!IsL13G1(row) && !IsL13G2(row) && !IsL14(row))
-                return EvaluationResult.Ok();
+            bool estOrdinateur = row.CategorieModele?.Contains("ordinateur", StringComparison.OrdinalIgnoreCase) == true;
+            if (!estOrdinateur) return EvaluationResult.Ok();
 
-            // Évaluer le matériel selon son état
-            bool isL13G1 = IsL13G1(row);
-            bool isL13G2 = IsL13G2(row);
-            bool isL14 = IsL14(row);
+            bool hasL13 = row.Modele?.Contains("L13", StringComparison.OrdinalIgnoreCase) == true;
+            bool hasL14 = row.Modele?.Contains("L14", StringComparison.OrdinalIgnoreCase) == true;
 
-            bool isFunctional = IsFunctional(row);
-            bool isDefective = IsDefective(row);
+            if (!hasL13 && !hasL14) return EvaluationResult.Ok();
 
-            // Si ni fonctionnel ni défectueux (état inconnu), pas d'anomalie
-            if (!isFunctional && !isDefective)
+            bool estDefectueux = row.SousEtat?.Contains("défectueux", StringComparison.OrdinalIgnoreCase) == true;
+
+            if (hasL13)
+            {
+                bool estG1 = IsL13G1(row.Modele);
+                if (estG1)
+                    return EvaluerL13G1(row, estDefectueux);
+                else
+                    return EvaluerAvecDateRenouvellement(row, estDefectueux, "L13 G2 8 Go");
+            }
+            else // L14
+            {
+                return EvaluerAvecDateRenouvellement(row, estDefectueux, "L14 8 Go");
+            }
+        }
+
+        private bool IsL13G1(string? modele)
+        {
+            if (modele == null) return false;
+            foreach (var suffix in _suffixesG1)
+                if (modele.Contains(suffix, StringComparison.OrdinalIgnoreCase)) return true;
+            return modele.Contains("G1", StringComparison.OrdinalIgnoreCase)
+                || modele.Contains("Gen 1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private EvaluationResult EvaluerL13G1(HardwareRow row, bool estDefectueux)
+        {
+            if (!estDefectueux)
             {
                 return new EvaluationResult
                 {
-                    EstAnomalie = true,
-                    Niveau = NiveauAnomalie.Info,
-                    Message = "État du matériel non déterminé — vérification manuelle requise",
-                    SousEtatConseille = ""
+                    EstAnomalie = false,
+                    Message = "L13 G1 8 Go fonctionnel → Disponible Re-Use (incident/contrat court)"
                 };
             }
 
-            // ──────────────────────────────────────────────────────────────
-            //  CAS 1 : FONCTIONNEL
-            // ──────────────────────────────────────────────────────────────
-            if (isFunctional)
+            // Défectueux → Revalorisation obligatoire
+            bool enRevalorisation = row.SousEtat?.Contains("revalorisation", StringComparison.OrdinalIgnoreCase) == true;
+            if (!enRevalorisation)
             {
-                string currentSubstate = row.SousEtat ?? string.Empty;
-                string modelLabel = GetModelLabel(row);
-
-                // OK si déjà en Disponible Re-Use ou sous-états acceptables
-                if (SubstateMatches(currentSubstate, "Disponible Re-Use") ||
-                    SubstateMatches(currentSubstate, "Disponible neuf") ||
-                    SubstateMatches(currentSubstate, "Reprise en attente") ||
-                    SubstateMatches(currentSubstate, "Réservé/Masterisé"))
-                {
-                    return EvaluationResult.Ok();
-                }
-
-                // Anomalie : fonctionnel mais dans un autre sous-état
                 return new EvaluationResult
                 {
                     EstAnomalie = true,
-                    Niveau = NiveauAnomalie.Avertissement,
-                    Message = $"ANOMALIE : {modelLabel} fonctionnel devrait être en Disponible Re-Use, pas en '{currentSubstate}'",
-                    SousEtatConseille = "Disponible Re-Use"
+                    Niveau = NiveauAnomalie.Erreur,
+                    Message = "L13 G1 8 Go défectueux → doit aller en Revalorisation",
+                    SousEtatConseille = "Classer en Revalorisation + ajouter commentaire panne"
                 };
             }
 
-            // ──────────────────────────────────────────────────────────────
-            //  CAS 2 : DÉFECTUEUX — logique dépend du modèle et de la date
-            // ──────────────────────────────────────────────────────────────
-            int? renewalYear = ExtractRenewalYear(row);
-            string currentSubstate_def = row.SousEtat ?? string.Empty;
-            string modelLabel_def = GetModelLabel(row);
-
-            if (isL13G1)
+            if (!SpiceChecker.Services.ValidationHelpers.HasValidComment(row.Description))
             {
-                // L13 G1 déf. → toujours Revalorisation
-                string actionTarget = "Revalorisation";
-
-                if (SubstateMatches(currentSubstate_def, actionTarget))
-                {
-                    // OK - commentaire de panne obligatoire ?
-                    if (!HasDefectComment(row))
-                    {
-                        return new EvaluationResult
-                        {
-                            EstAnomalie = true,
-                            Niveau = NiveauAnomalie.Erreur,
-                            Message = $"{modelLabel_def} défectueux en {actionTarget} — ⚠ COMMENTAIRE DE PANNE OBLIGATOIRE",
-                            SousEtatConseille = actionTarget
-                        };
-                    }
-                    return EvaluationResult.Ok();
-                }
-
-                // En transition ou anomalie
-                if (SubstateMatches(currentSubstate_def, "Reprise en attente") ||
-                    SubstateMatches(currentSubstate_def, "Réservé/Masterisé"))
-                {
-                    return EvaluationResult.Ok(); // Transition acceptable
-                }
-
                 return new EvaluationResult
                 {
                     EstAnomalie = true,
-                    Niveau = NiveauAnomalie.Avertissement,
-                    Message = $"ANOMALIE : {modelLabel_def} défectueux devrait être en {actionTarget}, pas en '{currentSubstate_def}'",
-                    SousEtatConseille = actionTarget
-                };
-            }
-
-            if (isL13G2 || isL14)
-            {
-                // Date manquante → avertissement
-                if (renewalYear == null)
-                {
-                    return new EvaluationResult
-                    {
-                        EstAnomalie = true,
-                        Niveau = NiveauAnomalie.Avertissement,
-                        Message = $"⚠ Date de renouvellement manquante pour {modelLabel_def} défectueux — vérification manuelle requise",
-                        SousEtatConseille = ""
-                    };
-                }
-
-                string actionTarget = renewalYear.Value <= 2027 ? "Revalorisation" : "Réparation";
-
-                if (SubstateMatches(currentSubstate_def, actionTarget))
-                {
-                    // OK - commentaire de panne obligatoire ?
-                    if (!HasDefectComment(row))
-                    {
-                        return new EvaluationResult
-                        {
-                            EstAnomalie = true,
-                            Niveau = NiveauAnomalie.Erreur,
-                            Message = $"{modelLabel_def} défectueux en {actionTarget} (renouv. {renewalYear}) — ⚠ COMMENTAIRE DE PANNE OBLIGATOIRE",
-                            SousEtatConseille = actionTarget
-                        };
-                    }
-                    return EvaluationResult.Ok();
-                }
-
-                // En transition ou anomalie
-                if (SubstateMatches(currentSubstate_def, "Reprise en attente") ||
-                    SubstateMatches(currentSubstate_def, "Réservé/Masterisé"))
-                {
-                    return EvaluationResult.Ok(); // Transition acceptable
-                }
-
-                return new EvaluationResult
-                {
-                    EstAnomalie = true,
-                    Niveau = NiveauAnomalie.Avertissement,
-                    Message = $"ANOMALIE : {modelLabel_def} défectueux (renouv. {renewalYear}) devrait être en {actionTarget}, pas en '{currentSubstate_def}'",
-                    SousEtatConseille = actionTarget
+                    Niveau = NiveauAnomalie.Erreur,
+                    Message = "L13 G1 8 Go en Revalorisation sans commentaire de panne",
+                    SousEtatConseille = "Ajouter un commentaire de panne (min. 10 caractères)"
                 };
             }
 
             return EvaluationResult.Ok();
         }
 
-        // ──────────────────────────────────────────────────────────────
-        //  Méthodes utilitaires
-        // ──────────────────────────────────────────────────────────────
-        private bool IsL13G1(HardwareRow row)
+        private EvaluationResult EvaluerAvecDateRenouvellement(HardwareRow row, bool estDefectueux, string label)
         {
-            if (string.IsNullOrEmpty(row.Modele)) return false;
-            return L13G1Pattern.IsMatch(row.Modele) || L13G1AltPattern.IsMatch(row.Modele);
-        }
-
-        private bool IsL13G2(HardwareRow row)
-        {
-            if (string.IsNullOrEmpty(row.Modele)) return false;
-            return L13G2Pattern.IsMatch(row.Modele) || L13G2AltPattern.IsMatch(row.Modele);
-        }
-
-        private bool IsL14(HardwareRow row)
-        {
-            if (string.IsNullOrEmpty(row.Modele)) return false;
-            return L14Pattern.IsMatch(row.Modele) || L14G1AltPattern.IsMatch(row.Modele) || L14G2AltPattern.IsMatch(row.Modele);
-        }
-
-        private string GetModelLabel(HardwareRow row)
-        {
-            if (IsL13G1(row)) return "ThinkPad L13 G1 (8 Go)";
-            if (IsL13G2(row)) return "ThinkPad L13 G2 (8 Go)";
-            if (IsL14(row)) return "ThinkPad L14 (8 Go)";
-            return "Lenovo 8 Go";
-        }
-
-        private bool IsFunctional(HardwareRow row)
-        {
-            var etat = (row.Etat ?? "").ToLowerInvariant();
-            var sousEtat = (row.SousEtat ?? "").ToLowerInvariant();
-
-            // Fonctionnel si état est "En service", "Opérationnel", "Fonctionnel"
-            // OU sous-état est "Disponible neuf", "Disponible Re-Use", etc.
-            return etat.Contains("en service") ||
-                   etat.Contains("operationnel") ||
-                   etat.Contains("fonctionnel") ||
-                   etat.Contains("ok") ||
-                   etat.Contains("disponible") ||
-                   sousEtat.Contains("disponible") ||
-                   sousEtat.Contains("re-use") ||
-                   sousEtat.Contains("reuse");
-        }
-
-        private bool IsDefective(HardwareRow row)
-        {
-            var etat = (row.Etat ?? "").ToLowerInvariant();
-            var sousEtat = (row.SousEtat ?? "").ToLowerInvariant();
-            var description = (row.ToString() ?? "").ToLowerInvariant();
-
-            return etat.Contains("hs") ||
-                   etat.Contains("defect") ||
-                   etat.Contains("panne") ||
-                   etat.Contains("h.s.") ||
-                   sousEtat.Contains("defect") ||
-                   sousEtat.Contains("hs") ||
-                   sousEtat.Contains("revalorisation");
-        }
-
-        private int? ExtractRenewalYear(HardwareRow row)
-        {
-            try
+            if (!estDefectueux)
             {
-                if (row.DateRenouvellement.HasValue)
-                    return row.DateRenouvellement.Value.Year;
-
-                // Fallback : tentative depuis DateSousEtat si present
-                if (row.DateSousEtat.HasValue)
-                    return row.DateSousEtat.Value.Year;
-
-                return null;
+                return new EvaluationResult
+                {
+                    EstAnomalie = false,
+                    Message = $"{label} fonctionnel → Disponible Re-Use"
+                };
             }
-            catch
+
+            // Défectueux
+            if (!row.DateRenouvellement.HasValue)
             {
-                return null;
+                return new EvaluationResult
+                {
+                    EstAnomalie = true,
+                    Niveau = NiveauAnomalie.Avertissement,
+                    Message = $"{label} défectueux — date de renouvellement manquante",
+                    SousEtatConseille = "Renseigner la date de renouvellement"
+                };
             }
-        }
 
-        private bool HasDefectComment(HardwareRow row)
-        {
-            // Vérifier la présence d'une description de panne (au moins 10 caractères)
-            var desc = (row.ToString() ?? "").Trim();
-            return !string.IsNullOrEmpty(desc) && desc.Length >= 10;
-        }
+            int annee = row.DateRenouvellement.Value.Year;
 
-        private bool SubstateMatches(string actual, string target)
-        {
-            if (string.IsNullOrEmpty(actual) || string.IsNullOrEmpty(target))
-                return false;
-            return actual.Equals(target, StringComparison.OrdinalIgnoreCase);
+            if (annee <= 2027)
+            {
+                // Revalorisation attendue
+                bool enRevalorisation = row.SousEtat?.Contains("revalorisation", StringComparison.OrdinalIgnoreCase) == true;
+                if (!enRevalorisation)
+                {
+                    return new EvaluationResult
+                    {
+                        EstAnomalie = true,
+                        Niveau = NiveauAnomalie.Erreur,
+                        Message = $"{label} défectueux → doit aller en Revalorisation",
+                        SousEtatConseille = "Classer en Revalorisation + commentaire panne"
+                    };
+                }
+
+                if (!SpiceChecker.Services.ValidationHelpers.HasValidComment(row.Description))
+                {
+                    return new EvaluationResult
+                    {
+                        EstAnomalie = true,
+                        Niveau = NiveauAnomalie.Erreur,
+                        Message = $"{label} en Revalorisation sans commentaire de panne",
+                        SousEtatConseille = "Ajouter un commentaire de panne (min. 10 caractères)"
+                    };
+                }
+
+                return EvaluationResult.Ok();
+            }
+            else // annee >= 2028
+            {
+                // Réparation attendue
+                bool enRevalorisation = row.SousEtat?.Contains("revalorisation", StringComparison.OrdinalIgnoreCase) == true;
+                if (enRevalorisation)
+                {
+                    return new EvaluationResult
+                    {
+                        EstAnomalie = true,
+                        Niveau = NiveauAnomalie.Erreur,
+                        Message = $"{label} renouvellement ≥ 2028 → Réparation, pas Revalorisation",
+                        SousEtatConseille = "Classer en Réparation"
+                    };
+                }
+
+                bool enReparation = row.SousEtat?.Contains("réparation", StringComparison.OrdinalIgnoreCase) == true
+                                 || row.SousEtat?.Contains("reparation", StringComparison.OrdinalIgnoreCase) == true;
+                if (!enReparation)
+                {
+                    return new EvaluationResult
+                    {
+                        EstAnomalie = true,
+                        Niveau = NiveauAnomalie.Erreur,
+                        Message = $"{label} défectueux renouvellement ≥ 2028 → doit aller en Réparation",
+                        SousEtatConseille = "Classer en Réparation"
+                    };
+                }
+
+                return EvaluationResult.Ok();
+            }
         }
     }
 }
-

@@ -14,6 +14,7 @@ namespace SpiceChecker.Rules
     public class RevalorisationRule : IRule
     {
         public string Nom => "Revalorisation à envisager";
+        public bool IsOverride => false;
 
         private static readonly string[] _sousEtatsRevalorisation = new[]
         {

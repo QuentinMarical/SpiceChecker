@@ -12,6 +12,7 @@ namespace SpiceChecker.Rules
     public class StaleSubstateRule : IRule
     {
         public string Nom => "Sous-état ancien";
+        public bool IsOverride => false;
 
         // Seuil d'alerte en jours — TJMR (> 90j = avertissement)
         private const int SeuilAvertissement = 90;
