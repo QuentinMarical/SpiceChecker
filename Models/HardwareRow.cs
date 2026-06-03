@@ -4,6 +4,7 @@ namespace SpiceChecker.Models
 {
     public class HardwareRow
     {
+        public bool Selectionnee { get; set; }
         public string AssetTag { get; set; } = "";
         public string Etat { get; set; } = "";
         public string SousEtat { get; set; } = "";

@@ -21,11 +21,11 @@ namespace SpiceChecker.Rules
 
         public EvaluationResult Evaluate(HardwareRow row)
         {
-            var result = EvaluationResult.Ok();
-            if (row == null) return result;
+            if (row == null) return EvaluationResult.Ok();
 
+            var result = EvaluationResult.Ok();
             var sousEtat  = (row.SousEtat  ?? "").ToLowerInvariant();
-            var commentaires = (row.ToString().ToLowerInvariant()); // placeholder, on n'a pas la colonne ici
+            var commentaires = (row.ToString() ?? "").ToLowerInvariant(); // placeholder, on n'a pas la colonne ici
 
             // Si le sous-état est "Défectueux" officiel mais que le matériel est listé
             // avec un état potentiellement disponible (Re-Use, Disponible neuf) → contradiction
@@ -40,7 +40,7 @@ namespace SpiceChecker.Rules
                 {
                     EstAnomalie = true,
                     Niveau = NiveauAnomalie.Erreur,
-                    Message = $"Sous-état contradictoire : défectueux ET disponible ({row.SousEtat})",
+                    Message = $"Sous-état contradictoire : défectueux ET disponible ({row.SousEtat ?? "(vide)"})",
                     SousEtatConseille = "Défectueux"
                 };
             }
