@@ -29,10 +29,9 @@ namespace SpiceChecker.Rules
             {
                 return new EvaluationResult
                 {
-                    EstAnomalie = true,
-                    Niveau = NiveauAnomalie.Erreur,
-                    Message = $"Lenovo {row.RamGo} Go défectueux → doit aller en Réparation, jamais en Revalorisation",
-                    SousEtatConseille = "Classer en Réparation"
+                    EstAnomalie = false,
+                    Niveau = NiveauAnomalie.OK,
+                    Message = $"Lenovo {row.RamGo} Go défectueux OK → conserver en Défectueux, jamais en Revalorisation"
                 };
             }
 

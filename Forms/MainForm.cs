@@ -28,7 +28,9 @@ namespace SpiceChecker
         private BindingList<HardwareRow> _view = new BindingList<HardwareRow>();
         private readonly BindingSource _bs = new BindingSource();
 
-        // Toolbar
+        // Menu / commandes
+        private Panel _menuPanel = null!;
+        private MenuStrip _menu = null!;
         private Panel _toolbarPanel = null!;
         private ToolStrip _toolbar = null!;
         private ToolStripButton _btnOpen = null!, _btnExport = null!, _btnExportXlsx = null!, _btnPrint = null!, _btnCopy = null!, _btnAbout = null!;
@@ -62,6 +64,7 @@ namespace SpiceChecker
         private ToolStripStatusLabel _lblCountErreur = null!, _lblCountAvert = null!, _lblCountOk = null!;
         private ContextMenuStrip _contextMenu = null!;
         private int _contextMenuRowIndex = -1;
+        private bool _isUpdatingFilters;
 
         // Pour l'impression
         private int _printRowIndex = 0;
@@ -104,7 +107,37 @@ namespace SpiceChecker
 
         private void BuildUi()
         {
-            // Toolbar
+            // Barre de menus
+            _menuPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0), BackColor = ColorHelper.EnsureMinAlpha(Color.Transparent, 30) };
+            _menu = new MenuStrip { Dock = DockStyle.Fill };
+            var menuSearchHost = new Panel { Dock = DockStyle.Right, Width = 280, Padding = new Padding(0, 4, 8, 4), BackColor = Color.Transparent };
+            _txtSearch = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                PlaceholderText = "Recherche..."
+            };
+            menuSearchHost.Controls.Add(_txtSearch);
+
+            var menuFichier = new ToolStripMenuItem("Fichier");
+            var menuOuvrir = new ToolStripMenuItem("Ouvrir XLSX...");
+            var menuExportCsv = new ToolStripMenuItem("Exporter CSV") { Enabled = false };
+            var menuExportXlsx = new ToolStripMenuItem("Exporter XLSX") { Enabled = false };
+            var menuImprimer = new ToolStripMenuItem("Imprimer") { Enabled = false };
+            var menuQuitter = new ToolStripMenuItem("Quitter");
+
+            var menuEdition = new ToolStripMenuItem("Édition");
+            var menuCopier = new ToolStripMenuItem("Copier la sélection") { Enabled = false };
+
+            var menuAffichage = new ToolStripMenuItem("Affichage");
+            var menuThemes = new ToolStripMenuItem("Thèmes");
+            var menuThemeLegacy95 = new ToolStripMenuItem("Legacy 95");
+            var menuThemeLunaXp = new ToolStripMenuItem("Luna XP");
+            var menuThemeAero7 = new ToolStripMenuItem("Aero 7");
+            var menuThemeFluent11 = new ToolStripMenuItem("Fluent 11 (clair)");
+
+            var menuAide = new ToolStripMenuItem("Aide");
+            var menuAPropos = new ToolStripMenuItem("À propos");
+
             _toolbarPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(0), BackColor = ColorHelper.EnsureMinAlpha(Color.Transparent, 30) };
             _toolbar = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, Dock = DockStyle.Fill };
             _btnOpen = new ToolStripButton("Ouvrir XLSX...");
@@ -128,6 +161,47 @@ namespace SpiceChecker
                 "Aero 7",
                 "Fluent 11 (clair)"
             });
+
+            menuFichier.DropDownItems.AddRange(new ToolStripItem[]
+            {
+                menuOuvrir,
+                new ToolStripSeparator(),
+                menuExportCsv,
+                menuExportXlsx,
+                menuImprimer,
+                new ToolStripSeparator(),
+                menuQuitter
+            });
+            menuEdition.DropDownItems.Add(menuCopier);
+            menuThemes.DropDownItems.AddRange(new ToolStripItem[]
+            {
+                menuThemeLegacy95,
+                menuThemeLunaXp,
+                menuThemeAero7,
+                menuThemeFluent11
+            });
+            menuAffichage.DropDownItems.Add(menuThemes);
+            menuAide.DropDownItems.Add(menuAPropos);
+            _menu.Items.AddRange(new ToolStripItem[] { menuFichier, menuEdition, menuAffichage, menuAide });
+            _menuPanel.Controls.Add(_menu);
+            _menuPanel.Controls.Add(menuSearchHost);
+
+            menuOuvrir.Click += (s, e) => _btnOpen.PerformClick();
+            menuExportCsv.Click += (s, e) => _btnExport.PerformClick();
+            menuExportXlsx.Click += (s, e) => _btnExportXlsx.PerformClick();
+            menuImprimer.Click += (s, e) => _btnPrint.PerformClick();
+            menuQuitter.Click += (s, e) => Close();
+            menuCopier.Click += (s, e) => _btnCopy.PerformClick();
+            menuThemeLegacy95.Click += (s, e) => _cbTheme.SelectedIndex = 0;
+            menuThemeLunaXp.Click += (s, e) => _cbTheme.SelectedIndex = 1;
+            menuThemeAero7.Click += (s, e) => _cbTheme.SelectedIndex = 2;
+            menuThemeFluent11.Click += (s, e) => _cbTheme.SelectedIndex = 3;
+            menuAPropos.Click += (s, e) => _btnAbout.PerformClick();
+
+            _btnExport.EnabledChanged += (s, e) => menuExportCsv.Enabled = _btnExport.Enabled;
+            _btnExportXlsx.EnabledChanged += (s, e) => menuExportXlsx.Enabled = _btnExportXlsx.Enabled;
+            _btnPrint.EnabledChanged += (s, e) => menuImprimer.Enabled = _btnPrint.Enabled;
+            _btnCopy.EnabledChanged += (s, e) => menuCopier.Enabled = _btnCopy.Enabled;
 
             try
             {
@@ -174,16 +248,6 @@ namespace SpiceChecker
             }
             catch { }
 
-            _toolbar.Items.AddRange(new ToolStripItem[]
-            {
-                _btnOpen, new ToolStripSeparator(),
-                _btnExport, _btnExportXlsx, _btnPrint, _btnCopy,
-                new ToolStripSeparator(), _btnAbout,
-                new ToolStripSeparator { Alignment = ToolStripItemAlignment.Right }, _cbTheme, _lblTheme,
-                new ToolStripSeparator(), _lblSource
-            });
-            _toolbarPanel.Controls.Add(_toolbar);
-
             // Filtres
             _filterPanelHost = new Panel
             {
@@ -200,24 +264,15 @@ namespace SpiceChecker
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
                 Padding = new Padding(6, 4, 6, 4),
                 RowCount = 1,
-                ColumnCount = 13,
+                ColumnCount = 11,
                 BackColor = Color.Transparent
             };
 
-            for (int i = 0; i < 13; i++)
+            for (int i = 0; i < 11; i++)
             {
                 _filterPanel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             }
             _filterPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
-
-            var lblSearch = new Label { Text = "Recherche :", AutoSize = true, Anchor = AnchorStyles.Left };
-            _txtSearch = new TextBox
-            {
-                AutoSize = false,
-                Width = 260,
-                PlaceholderText = "Tag, modèle, NS, utilisateur...",
-                Anchor = AnchorStyles.Left
-            };
 
             var lblSE = new Label { Text = "Sous-état :", AutoSize = true, Anchor = AnchorStyles.Left };
             _cbSousEtat = new ComboBox { Width = 180, DropDownStyle = ComboBoxStyle.DropDownList, Anchor = AnchorStyles.Left };
@@ -247,19 +302,17 @@ namespace SpiceChecker
 
             _lblCount = new Label { Text = "0 / 0", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Anchor = AnchorStyles.Left };
 
-            _filterPanel.Controls.Add(lblSearch, 0, 0);
-            _filterPanel.Controls.Add(_txtSearch, 1, 0);
-            _filterPanel.Controls.Add(lblSE, 2, 0);
-            _filterPanel.Controls.Add(_cbSousEtat, 3, 0);
-            _filterPanel.Controls.Add(lblCat, 4, 0);
-            _filterPanel.Controls.Add(_cbCategorie, 5, 0);
-            _filterPanel.Controls.Add(lblFab, 6, 0);
-            _filterPanel.Controls.Add(_cbFabricant, 7, 0);
-            _filterPanel.Controls.Add(lblMod, 8, 0);
-            _filterPanel.Controls.Add(_cbModele, 9, 0);
-            _filterPanel.Controls.Add(_chkAnomaliesOnly, 10, 0);
-            _filterPanel.Controls.Add(btnReset, 11, 0);
-            _filterPanel.Controls.Add(_lblCount, 12, 0);
+            _filterPanel.Controls.Add(lblSE, 0, 0);
+            _filterPanel.Controls.Add(_cbSousEtat, 1, 0);
+            _filterPanel.Controls.Add(lblCat, 2, 0);
+            _filterPanel.Controls.Add(_cbCategorie, 3, 0);
+            _filterPanel.Controls.Add(lblFab, 4, 0);
+            _filterPanel.Controls.Add(_cbFabricant, 5, 0);
+            _filterPanel.Controls.Add(lblMod, 6, 0);
+            _filterPanel.Controls.Add(_cbModele, 7, 0);
+            _filterPanel.Controls.Add(_chkAnomaliesOnly, 8, 0);
+            _filterPanel.Controls.Add(btnReset, 9, 0);
+            _filterPanel.Controls.Add(_lblCount, 10, 0);
 
             // Grille
             _grid = new TransparentDataGridView
@@ -302,20 +355,21 @@ namespace SpiceChecker
 
             _filterPanelHost.Controls.Add(_filterPanel);
 
-            _toolbarPanel.Paint += (s, e) =>
-            {
-                using var p = new Pen(_currentTheme.BorderColor);
-                e.Graphics.DrawLine(p, 0, _toolbarPanel.Height - 1, _toolbarPanel.Width, _toolbarPanel.Height - 1);
-            };
             _filterPanelHost.Paint += (s, e) =>
             {
                 using var p = new Pen(_currentTheme.BorderColor);
                 e.Graphics.DrawLine(p, 0, _filterPanelHost.Height - 1, _filterPanelHost.Width, _filterPanelHost.Height - 1);
             };
+            _menuPanel.Paint += (s, e) =>
+            {
+                using var p = new Pen(_currentTheme.BorderColor);
+                e.Graphics.DrawLine(p, 0, _menuPanel.Height - 1, _menuPanel.Width, _menuPanel.Height - 1);
+            };
 
+            MainMenuStrip = _menu;
             Controls.Add(_grid);
             Controls.Add(_filterPanelHost);
-            Controls.Add(_toolbarPanel);
+            Controls.Add(_menuPanel);
             Controls.Add(_status);
         }
 
@@ -382,7 +436,7 @@ namespace SpiceChecker
             try
             {
                 if (Controls.Contains(_filterPanelHost)) Controls.SetChildIndex(_filterPanelHost, Controls.Count - 1);
-                if (Controls.Contains(_toolbarPanel)) Controls.SetChildIndex(_toolbarPanel, Controls.Count - 1);
+                if (Controls.Contains(_menuPanel)) Controls.SetChildIndex(_menuPanel, Controls.Count - 1);
                 if (Controls.Contains(_titleBar)) Controls.SetChildIndex(_titleBar, Controls.Count - 1);
             }
             finally
@@ -397,7 +451,8 @@ namespace SpiceChecker
 
             EnsureCustomTitleBar();
             _titleBar.ApplyTheme(_currentTheme);
-            ThemeApplier.Apply(this, _currentTheme, _grid, _toolbarPanel, _filterPanelHost, _toolbar);
+            ThemeApplier.Apply(this, _currentTheme, _grid, _toolbarPanel, _filterPanelHost, _toolbar, _menuPanel, _menu);
+            _toolbarPanel.Visible = false;
 
             if (IsHandleCreated)
             {
@@ -551,6 +606,7 @@ namespace SpiceChecker
             _grid.CellMouseDown += Grid_CellMouseDown;
             _grid.CellContentClick += Grid_CellContentClick;
             _grid.CurrentCellDirtyStateChanged += Grid_CurrentCellDirtyStateChanged;
+            _grid.KeyDown += Grid_KeyDown;
 
             // Drag & drop
             this.DragEnter += (s, e) =>
@@ -648,47 +704,63 @@ namespace SpiceChecker
         // ==================================================================
         private void RebuildFilterDropdowns()
         {
-            var sousEtats = _allRows.Select(r => r.SousEtat ?? "")
-                                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                                    .Distinct().OrderBy(s => s).ToList();
-            var categories = _allRows.Select(r => r.CategorieModele ?? "")
-                                     .Where(s => !string.IsNullOrWhiteSpace(s))
-                                     .Distinct().OrderBy(s => s).ToList();
-            var fabricants = _allRows.Select(r => r.Fabricant ?? "")
-                                     .Where(s => !string.IsNullOrWhiteSpace(s))
-                                     .Distinct().OrderBy(s => s).ToList();
+            _isUpdatingFilters = true;
+            try
+            {
+                var sousEtats = _allRows.Select(r => r.SousEtat ?? "")
+                                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                                        .Distinct().OrderBy(s => s).ToList();
+                var categories = _allRows.Select(r => r.CategorieModele ?? "")
+                                         .Where(s => !string.IsNullOrWhiteSpace(s))
+                                         .Distinct().OrderBy(s => s).ToList();
+                var fabricants = _allRows.Select(r => r.Fabricant ?? "")
+                                         .Where(s => !string.IsNullOrWhiteSpace(s))
+                                         .Distinct().OrderBy(s => s).ToList();
 
-            _cbSousEtat.BeginUpdate();
-            _cbSousEtat.Items.Clear();
-            _cbSousEtat.Items.Add("(tous)");
-            foreach (var s in sousEtats) _cbSousEtat.Items.Add(s);
-            _cbSousEtat.SelectedIndex = 0;
-            _cbSousEtat.EndUpdate();
+                _cbSousEtat.BeginUpdate();
+                _cbSousEtat.Items.Clear();
+                _cbSousEtat.Items.Add("(tous)");
+                foreach (var s in sousEtats) _cbSousEtat.Items.Add(s);
+                _cbSousEtat.SelectedIndex = 0;
+                _cbSousEtat.EndUpdate();
 
-            _cbCategorie.BeginUpdate();
-            _cbCategorie.Items.Clear();
-            _cbCategorie.Items.Add("(toutes)");
-            foreach (var c in categories) _cbCategorie.Items.Add(c);
-            _cbCategorie.SelectedIndex = 0;
-            _cbCategorie.EndUpdate();
+                _cbCategorie.BeginUpdate();
+                _cbCategorie.Items.Clear();
+                _cbCategorie.Items.Add("(toutes)");
+                foreach (var c in categories) _cbCategorie.Items.Add(c);
+                _cbCategorie.SelectedIndex = 0;
+                _cbCategorie.EndUpdate();
 
-            _cbFabricant.BeginUpdate();
-            _cbFabricant.Items.Clear();
-            _cbFabricant.Items.Add("(tous)");
-            foreach (var f in fabricants) _cbFabricant.Items.Add(f);
-            _cbFabricant.SelectedIndex = 0;
-            _cbFabricant.EndUpdate();
+                _cbFabricant.BeginUpdate();
+                _cbFabricant.Items.Clear();
+                _cbFabricant.Items.Add("(tous)");
+                foreach (var f in fabricants) _cbFabricant.Items.Add(f);
+                _cbFabricant.SelectedIndex = 0;
+                _cbFabricant.EndUpdate();
 
-            RebuildModeleDropdown();
-            if (_cbModele.Items.Count > 0)
-                _cbModele.SelectedIndex = 0;
+                RebuildModeleDropdown();
+                if (_cbModele.Items.Count > 0)
+                    _cbModele.SelectedIndex = 0;
+            }
+            finally
+            {
+                _isUpdatingFilters = false;
+            }
         }
 
-        private void RebuildModeleDropdown()
+        private void RebuildModeleDropdown(IEnumerable<HardwareRow>? source = null)
         {
             var fabSel = _cbFabricant.SelectedItem as string;
             var catSel = _cbCategorie.SelectedItem as string;
-            IEnumerable<HardwareRow> q = _allRows;
+            var seSel = _cbSousEtat.SelectedItem as string;
+            var selectedModele = _cbModele.SelectedItem as string;
+            bool onlyAno = _chkAnomaliesOnly.Checked;
+            var search = (_txtSearch.Text ?? "").Trim().ToLowerInvariant();
+
+            IEnumerable<HardwareRow> q = source ?? _allRows;
+
+            if (!string.IsNullOrEmpty(seSel) && seSel != "(tous)")
+                q = q.Where(r => string.Equals(r.SousEtat, seSel, StringComparison.OrdinalIgnoreCase));
 
             if (!string.IsNullOrEmpty(catSel) && catSel != "(toutes)")
                 q = q.Where(r => MatchCategory(r.CategorieModele, catSel));
@@ -696,27 +768,113 @@ namespace SpiceChecker
             if (!string.IsNullOrEmpty(fabSel) && fabSel != "(tous)")
                 q = q.Where(r => string.Equals(r.Fabricant, fabSel, StringComparison.OrdinalIgnoreCase));
 
+            if (onlyAno)
+                q = q.Where(r => !string.IsNullOrEmpty(r.AnomalieNiveau) && r.AnomalieNiveau != "OK");
+
+            if (search.Length > 0)
+            {
+                q = q.Where(r =>
+                    NormalizeForSearch(r.AssetTag).Contains(search) ||
+                    NormalizeForSearch(r.Modele).Contains(search) ||
+                    NormalizeForSearch(r.Fabricant).Contains(search) ||
+                    NormalizeForSearch(r.AffecteA).Contains(search) ||
+                    NormalizeForSearch(r.SousEtat).Contains(search) ||
+                    NormalizeForSearch(r.CategorieModele).Contains(search));
+            }
+
             var modeles = q.Select(r => r.Modele ?? "")
-                           .Where(s => !string.IsNullOrWhiteSpace(s))
-                           .Distinct().OrderBy(s => s).ToList();
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct()
+                .OrderBy(s => s)
+                .ToList();
 
-            var selectedModele = _cbModele.SelectedItem as string;
+            _isUpdatingFilters = true;
+            try
+            {
+                _cbModele.BeginUpdate();
+                _cbModele.Items.Clear();
+                _cbModele.Items.Add("(tous)");
+                foreach (var m in modeles) _cbModele.Items.Add(m);
 
-            _cbModele.BeginUpdate();
-            _cbModele.Items.Clear();
-            _cbModele.Items.Add("(tous)");
-            foreach (var m in modeles) _cbModele.Items.Add(m);
+                if (!string.IsNullOrEmpty(selectedModele) && _cbModele.Items.Contains(selectedModele))
+                    _cbModele.SelectedItem = selectedModele;
+                else
+                    _cbModele.SelectedIndex = 0;
 
-            if (!string.IsNullOrEmpty(selectedModele) && _cbModele.Items.Contains(selectedModele))
-                _cbModele.SelectedItem = selectedModele;
-            else
-                _cbModele.SelectedIndex = 0;
+                _cbModele.EndUpdate();
+            }
+            finally
+            {
+                _isUpdatingFilters = false;
+            }
+        }
 
-            _cbModele.EndUpdate();
+        private void RebuildFabricantDropdown(IEnumerable<HardwareRow>? source = null)
+        {
+            var selectedFabricant = _cbFabricant.SelectedItem as string;
+            var seSel = _cbSousEtat.SelectedItem as string;
+            var catSel = _cbCategorie.SelectedItem as string;
+            var modSel = _cbModele.SelectedItem as string;
+            bool onlyAno = _chkAnomaliesOnly.Checked;
+            var search = (_txtSearch.Text ?? "").Trim().ToLowerInvariant();
+
+            IEnumerable<HardwareRow> q = source ?? _allRows;
+
+            if (!string.IsNullOrEmpty(seSel) && seSel != "(tous)")
+                q = q.Where(r => string.Equals(r.SousEtat, seSel, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrEmpty(catSel) && catSel != "(toutes)")
+                q = q.Where(r => MatchCategory(r.CategorieModele, catSel));
+
+            if (!string.IsNullOrEmpty(modSel) && modSel != "(tous)")
+                q = q.Where(r => string.Equals(r.Modele, modSel, StringComparison.OrdinalIgnoreCase));
+
+            if (onlyAno)
+                q = q.Where(r => !string.IsNullOrEmpty(r.AnomalieNiveau) && r.AnomalieNiveau != "OK");
+
+            if (search.Length > 0)
+            {
+                q = q.Where(r =>
+                    NormalizeForSearch(r.AssetTag).Contains(search) ||
+                    NormalizeForSearch(r.Modele).Contains(search) ||
+                    NormalizeForSearch(r.Fabricant).Contains(search) ||
+                    NormalizeForSearch(r.AffecteA).Contains(search) ||
+                    NormalizeForSearch(r.SousEtat).Contains(search) ||
+                    NormalizeForSearch(r.CategorieModele).Contains(search));
+            }
+
+            var fabricants = q.Select(r => r.Fabricant ?? "")
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct()
+                .OrderBy(s => s)
+                .ToList();
+
+            _isUpdatingFilters = true;
+            try
+            {
+                _cbFabricant.BeginUpdate();
+                _cbFabricant.Items.Clear();
+                _cbFabricant.Items.Add("(tous)");
+                foreach (var f in fabricants) _cbFabricant.Items.Add(f);
+
+                if (!string.IsNullOrEmpty(selectedFabricant) && _cbFabricant.Items.Contains(selectedFabricant))
+                    _cbFabricant.SelectedItem = selectedFabricant;
+                else
+                    _cbFabricant.SelectedIndex = 0;
+
+                _cbFabricant.EndUpdate();
+            }
+            finally
+            {
+                _isUpdatingFilters = false;
+            }
         }
 
         private void ApplyFilters()
         {
+            if (_isUpdatingFilters)
+                return;
+
             var search = (_txtSearch.Text ?? "").Trim().ToLowerInvariant();
             var seSel = _cbSousEtat.SelectedItem as string;
             var catSel = _cbCategorie.SelectedItem as string;
@@ -755,6 +913,8 @@ namespace SpiceChecker
             var list = q.ToList();
             _view = new BindingList<HardwareRow>(list);
             _bs.DataSource = _view;
+            RebuildFabricantDropdown();
+            RebuildModeleDropdown();
             UpdateCount();
         }
 
@@ -890,6 +1050,35 @@ namespace SpiceChecker
 
             _grid.EndEdit();
             _grid.InvalidateRow(e.RowIndex);
+        }
+
+        private void Grid_KeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Space || _grid.SelectedRows.Count == 0)
+                return;
+
+            var lignes = _grid.SelectedRows.Cast<DataGridViewRow>()
+                .Where(r => r.DataBoundItem is HardwareRow)
+                .OrderBy(r => r.Index)
+                .ToList();
+
+            if (lignes.Count == 0)
+                return;
+
+            bool nouvelleValeur = lignes.Any(r => r.DataBoundItem is HardwareRow hw && !hw.Selectionnee);
+
+            foreach (var ligne in lignes)
+            {
+                if (ligne.DataBoundItem is HardwareRow hw)
+                {
+                    hw.Selectionnee = nouvelleValeur;
+                    _grid.InvalidateRow(ligne.Index);
+                }
+            }
+
+            _bs.ResetBindings(false);
+            e.Handled = true;
+            e.SuppressKeyPress = true;
         }
 
         private void EditSubState()
@@ -1099,6 +1288,20 @@ namespace SpiceChecker
         // ==================================================================
         private void CopySelection()
         {
+            var lignesCochees = _view
+                .Where(r => r.Selectionnee)
+                .Select(r => r.AssetTag)
+                .Where(tag => !string.IsNullOrWhiteSpace(tag))
+                .ToList();
+
+            if (lignesCochees.Count > 0)
+            {
+                var texte = string.Join(Environment.NewLine, lignesCochees);
+                Clipboard.SetText(texte);
+                _statusLabel.Text = $"{lignesCochees.Count} étiquette(s) cochée(s) copiée(s), une par ligne.";
+                return;
+            }
+
             if (_grid.SelectedRows.Count == 0) return;
 
             var cols = _grid.Columns.Cast<DataGridViewColumn>()
@@ -1132,7 +1335,7 @@ namespace SpiceChecker
             var pd = new PrintDocument();
             pd.DefaultPageSettings.Landscape = true;
             pd.DefaultPageSettings.Margins = new Margins(40, 40, 50, 40);
-            _printRowIndex = 0;
+            pd.BeginPrint += (s, e) => _printRowIndex = 0;
             pd.PrintPage += Pd_PrintPage;
 
             using var dlg = new PrintPreviewDialog
@@ -1160,8 +1363,7 @@ namespace SpiceChecker
                 return;
             }
 
-            var pageRect = g.VisibleClipBounds;
-            var bounds = new RectangleF(40, 40, pageRect.Width - 80, pageRect.Height - 80);
+            var bounds = e.MarginBounds;
 
             using var font = new Font("Segoe UI", 8f);
             using var bold = new Font("Segoe UI", 9f, FontStyle.Bold);

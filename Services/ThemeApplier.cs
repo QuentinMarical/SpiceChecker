@@ -8,7 +8,7 @@ namespace SpiceChecker.Services
     public static class ThemeApplier
     {
         public static void Apply(Form form, ThemeDefinition theme, DataGridView grid,
-            Panel toolbarPanel, Panel filterPanel, ToolStrip? toolStrip = null)
+            Panel toolbarPanel, Panel filterPanel, ToolStrip? toolStrip = null, Panel? menuPanel = null, MenuStrip? menuStrip = null)
         {
             bool hasBackdrop = theme.Backdrop != BackdropEffect.None;
 
@@ -32,6 +32,7 @@ namespace SpiceChecker.Services
             // Transparence des panels si backdrop actif
             if (hasBackdrop)
             {
+                if (menuPanel != null) MakeTransparent(menuPanel);
                 MakeTransparent(toolbarPanel);
                 MakeTransparent(filterPanel);
                 if (toolStrip != null)
@@ -39,9 +40,15 @@ namespace SpiceChecker.Services
                     toolStrip.BackColor = Color.Transparent;
                     toolStrip.Renderer = new TransparentToolStripRenderer(theme);
                 }
+                if (menuStrip != null)
+                {
+                    menuStrip.BackColor = Color.Transparent;
+                    menuStrip.Renderer = new TransparentToolStripRenderer(theme);
+                }
             }
             else
             {
+                if (menuPanel != null) menuPanel.BackColor = theme.ToolbarBackground;
                 toolbarPanel.BackColor = theme.ToolbarBackground;
                 filterPanel.BackColor = theme.FilterBarBackground;
                 if (toolStrip != null)
@@ -50,6 +57,12 @@ namespace SpiceChecker.Services
                     toolStrip.ForeColor = theme.TextColor;
                     toolStrip.Renderer = new ThemedToolStripRenderer(theme);
                 }
+                if (menuStrip != null)
+                {
+                    menuStrip.BackColor = theme.ToolbarBackground;
+                    menuStrip.ForeColor = theme.TextColor;
+                    menuStrip.Renderer = new ThemedToolStripRenderer(theme);
+                }
             }
 
             if (toolStrip != null)
@@ -57,6 +70,15 @@ namespace SpiceChecker.Services
                 toolStrip.ForeColor = theme.TextColor;
             }
 
+            if (menuStrip != null)
+            {
+                menuStrip.ForeColor = theme.TextColor;
+            }
+
+            if (menuPanel != null)
+            {
+                ApplyToControls(menuPanel, theme);
+            }
             ApplyToControls(toolbarPanel, theme);
             ApplyToControls(filterPanel, theme);
 

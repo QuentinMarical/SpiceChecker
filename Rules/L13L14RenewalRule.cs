@@ -149,7 +149,6 @@ namespace SpiceChecker.Rules
             }
             else // annee >= 2028
             {
-                // Réparation attendue
                 bool enRevalorisation = row.SousEtat?.Contains("revalorisation", StringComparison.OrdinalIgnoreCase) == true;
                 if (enRevalorisation)
                 {
@@ -157,25 +156,16 @@ namespace SpiceChecker.Rules
                     {
                         EstAnomalie = true,
                         Niveau = NiveauAnomalie.Erreur,
-                        Message = $"{label} renouvellement ≥ 2028 → Réparation, pas Revalorisation",
-                        SousEtatConseille = "Classer en Réparation"
+                        Message = $"{label} renouvellement ≥ 2028 → Défectueux, pas Revalorisation",
+                        SousEtatConseille = "Classer en Défectueux"
                     };
                 }
 
-                bool enReparation = row.SousEtat?.Contains("réparation", StringComparison.OrdinalIgnoreCase) == true
-                                 || row.SousEtat?.Contains("reparation", StringComparison.OrdinalIgnoreCase) == true;
-                if (!enReparation)
+                return new EvaluationResult
                 {
-                    return new EvaluationResult
-                    {
-                        EstAnomalie = true,
-                        Niveau = NiveauAnomalie.Erreur,
-                        Message = $"{label} défectueux renouvellement ≥ 2028 → doit aller en Réparation",
-                        SousEtatConseille = "Classer en Réparation"
-                    };
-                }
-
-                return EvaluationResult.Ok();
+                    EstAnomalie = false,
+                    Message = $"{label} défectueux renouvellement ≥ 2028 → conserver en Défectueux"
+                };
             }
         }
     }

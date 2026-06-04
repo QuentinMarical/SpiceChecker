@@ -182,7 +182,7 @@ namespace SpiceChecker.Services
                     var norm = Normalize(raw);
                     var alreadyMapped = new HashSet<string>(columnMapping.Values, StringComparer.Ordinal);
                     var prop = ResolveMapping(norm, alreadyMapped, allNormalized);
-                    if (!string.IsNullOrEmpty(prop))
+                    if (!string.IsNullOrEmpty(prop) && !alreadyMapped.Contains(prop))
                         columnMapping[cell.Address.ColumnNumber] = prop;
                 }
 
@@ -283,6 +283,16 @@ namespace SpiceChecker.Services
                 else if (modele.Contains("HP") || modele.Contains("ELITEBOOK") ||
                          modele.Contains("PROBOOK") || modele.Contains("ZBOOK"))
                     row.Fabricant = "HP";
+                else if (modele.Contains("ARUBA"))
+                    row.Fabricant = "ARUBA";
+                else if (modele.Contains("CISCO") || modele.Contains("CATALYST"))
+                    row.Fabricant = "CISCO";
+                else if (modele.Contains("JUNIPER"))
+                    row.Fabricant = "JUNIPER";
+                else if (modele.Contains("FORTINET") || modele.Contains("FORTIGATE"))
+                    row.Fabricant = "FORTINET";
+                else if (modele.Contains("UBIQUITI") || modele.Contains("UNIFI"))
+                    row.Fabricant = "UBIQUITI";
                 else if (modele.Contains("ASUS"))
                     row.Fabricant = "ASUS";
                 else if (modele.Contains("SAMSUNG"))

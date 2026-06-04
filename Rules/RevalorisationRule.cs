@@ -27,6 +27,9 @@ namespace SpiceChecker.Rules
             var result = EvaluationResult.Ok();
             if (row == null) return result;
 
+            if (row.CategorieModele?.Contains("équipement réseau", StringComparison.OrdinalIgnoreCase) == true)
+                return result;
+
             var sousEtat = (row.SousEtat ?? "").ToLowerInvariant();
 
             // Cas 1 : déjà en Revalorisation ou Retour loueur officiels → OK "conforme"
