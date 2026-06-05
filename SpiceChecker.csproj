@@ -17,6 +17,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="SpiceChecker.Application\**\*.cs" />
+    <Compile Remove="SpiceChecker.Application.Tests\**\*.cs" />
+    <Compile Remove="SpiceChecker.Domain\**\*.cs" />
+    <Compile Remove="SpiceChecker.Domain.Tests\**\*.cs" />
+    <Compile Remove="SpiceChecker.Infrastructure\**\*.cs" />
+    <Compile Remove="SpiceChecker.Infrastructure.Tests\**\*.cs" />
+    <Compile Remove="SpiceChecker.WinForms.Tests\**\*.cs" />
+    <Compile Remove="SpiceChecker.WinForms\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="Vanara.PInvoke.DwmApi" Version="5.0.5" />
   </ItemGroup>
