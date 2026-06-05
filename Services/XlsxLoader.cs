@@ -165,9 +165,34 @@ namespace SpiceChecker.Services
                     return result;
                 }
 
-                // Ligne d'en-tête
-                var headerRow = rows[0];
-                var headerCells = headerRow.CellsUsed().ToList();
+                var firstCol = used.RangeAddress.FirstAddress.ColumnNumber;
+                var lastCol = used.RangeAddress.LastAddress.ColumnNumber;
+
+                // Ligne d'en-tête (tolérant : recherche de la ligne la plus probable)
+                int headerRowIndex = 0;
+                int bestScore = -1;
+                int probeCount = Math.Min(rows.Count, 10);
+
+                for (int ri = 0; ri < probeCount; ri++)
+                {
+                    var candidateCells = Enumerable.Range(firstCol, lastCol - firstCol + 1)
+                        .Select(col => ws.Cell(rows[ri].RowNumber(), col));
+
+                    int score = candidateCells
+                        .Select(c => Normalize(c.GetString()))
+                        .Count(norm => !string.IsNullOrEmpty(norm) && HeaderMap.ContainsKey(norm));
+
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        headerRowIndex = ri;
+                    }
+                }
+
+                var headerRow = rows[headerRowIndex];
+                var headerCells = Enumerable.Range(firstCol, lastCol - firstCol + 1)
+                    .Select(col => ws.Cell(headerRow.RowNumber(), col))
+                    .ToList();
                 var columnMapping = new Dictionary<int, string>(); // colNum -> propertyName
 
                 // Première passe : collecter tous les headers normalisés présents dans le fichier
@@ -190,7 +215,7 @@ namespace SpiceChecker.Services
                     result.Warnings.Add("Aucune colonne reconnue — vérifie les en-têtes du fichier");
 
                 // Lignes de données
-                for (int i = 1; i < rows.Count; i++)
+                for (int i = headerRowIndex + 1; i < rows.Count; i++)
                 {
                     var r = rows[i];
                     var hw = new HardwareRow();
@@ -198,7 +223,7 @@ namespace SpiceChecker.Services
 
                     foreach (var kv in columnMapping)
                     {
-                        var cell = r.Cell(kv.Key);
+                        var cell = ws.Cell(r.RowNumber(), kv.Key);
                         if (cell == null || cell.IsEmpty()) continue;
                         nonVide = true;
                         AssignValue(hw, kv.Value, cell);
@@ -219,16 +244,16 @@ namespace SpiceChecker.Services
         {
             switch (prop)
             {
-                case "AssetTag": hw.AssetTag = cell.GetString().Trim(); break;
-                case "Etat": hw.Etat = cell.GetString().Trim(); break;
-                case "SousEtat": hw.SousEtat = cell.GetString().Trim(); break;
-                case "Entrepot": hw.Entrepot = cell.GetString().Trim(); break;
-                case "CategorieModele": hw.CategorieModele = cell.GetString().Trim(); break;
-                case "Modele": hw.Modele = cell.GetString().Trim(); break;
-                case "Fabricant": hw.Fabricant = cell.GetString().Trim(); break;
-                case "NumeroSerie": hw.NumeroSerie = cell.GetString().Trim(); break;
-                case "AffecteA": hw.AffecteA = cell.GetString().Trim(); break;
-                case "Description": hw.Description = cell.GetString().Trim(); break;
+                case "AssetTag": hw.AssetTag = ReadCellText(cell); break;
+                case "Etat": hw.Etat = ReadCellText(cell); break;
+                case "SousEtat": hw.SousEtat = ReadCellText(cell); break;
+                case "Entrepot": hw.Entrepot = ReadCellText(cell); break;
+                case "CategorieModele": hw.CategorieModele = ReadCellText(cell); break;
+                case "Modele": hw.Modele = ReadCellText(cell); break;
+                case "Fabricant": hw.Fabricant = ReadCellText(cell); break;
+                case "NumeroSerie": hw.NumeroSerie = ReadCellText(cell); break;
+                case "AffecteA": hw.AffecteA = ReadCellText(cell); break;
+                case "Description": hw.Description = ReadCellText(cell); break;
                 case "RamGo": hw.RamGo = ParseRam(cell); break;
                 case "DateChangementSousEtat":
                     hw.DateChangementSousEtat = ParseDate(cell);
@@ -236,12 +261,36 @@ namespace SpiceChecker.Services
             }
         }
 
+        private static string ReadCellText(IXLCell cell)
+        {
+            if (cell == null || cell.IsEmpty()) return string.Empty;
+
+            var s = cell.GetFormattedString();
+            if (!string.IsNullOrWhiteSpace(s))
+                return s.Trim();
+
+            s = cell.GetString();
+            if (!string.IsNullOrWhiteSpace(s))
+                return s.Trim();
+
+            if (cell.TryGetValue<DateTime>(out var dt))
+                return dt.ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.GetCultureInfo("fr-FR"));
+
+            if (cell.DataType == XLDataType.Number)
+                return cell.GetDouble().ToString(CultureInfo.InvariantCulture);
+
+            if (cell.TryGetValue<string>(out s) && !string.IsNullOrWhiteSpace(s))
+                return s.Trim();
+
+            return string.Empty;
+        }
+
         private static double? ParseRam(IXLCell cell)
         {
             if (cell.DataType == XLDataType.Number)
                 return cell.GetDouble();
 
-            var s = cell.GetString();
+            var s = ReadCellText(cell);
             if (string.IsNullOrWhiteSpace(s)) return null;
 
             // Extrait le premier nombre (ex: "32 Go", "32GB", "32,0")
@@ -253,10 +302,23 @@ namespace SpiceChecker.Services
 
         private static DateTime? ParseDate(IXLCell cell)
         {
-            if (cell.DataType == XLDataType.DateTime)
-                return cell.GetDateTime();
+            if (cell == null || cell.IsEmpty())
+                return null;
 
-            var s = cell.GetString();
+            if (cell.TryGetValue<DateTime>(out var dt))
+                return dt;
+
+            if (cell.DataType == XLDataType.Number)
+            {
+                var n = cell.GetDouble();
+                if (n >= -657435 && n <= 2958465) // bornes OA Date
+                {
+                    try { return DateTime.FromOADate(n); }
+                    catch { }
+                }
+            }
+
+            var s = ReadCellText(cell);
             if (DateTime.TryParse(s, CultureInfo.GetCultureInfo("fr-FR"), DateTimeStyles.None, out var d))
                 return d;
             if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
@@ -339,7 +401,12 @@ namespace SpiceChecker.Services
                     bool sousEtatCoveredByOtherColumn =
                         alreadyMappedProps.Contains("SousEtat") ||
                         allNormalizedHeaders.Any(h => h != "etat" && HeaderMap.TryGetValue(h, out var p) && p == "SousEtat");
-                    return sousEtatCoveredByOtherColumn ? "Etat" : "SousEtat";
+
+                    if (sousEtatCoveredByOtherColumn)
+                        return "Etat";
+
+                    // Par défaut, "etat" est interprété comme l'état global.
+                    return "Etat";
                 }
                 return propName;
             }

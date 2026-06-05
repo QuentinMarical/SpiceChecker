@@ -69,6 +69,10 @@ namespace SpiceChecker
         // Pour l'impression
         private int _printRowIndex = 0;
 
+        // Évite la création de milliers d'objets Font pendant le rendu de la grille.
+        private static readonly Font GridFontRegular = new Font("Segoe UI", 9F, FontStyle.Regular);
+        private static readonly Font GridFontBold = new Font("Segoe UI", 9F, FontStyle.Bold);
+
         private const int WM_GETMINMAXINFO = 0x0024;
 
         [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -1003,11 +1007,11 @@ namespace SpiceChecker
 
             if (row.AnomalieNiveau == "Erreur" && (columnName == "col_AnomalieNiveau" || columnName == "col_AnomalieMessage"))
             {
-                e.CellStyle.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+                e.CellStyle.Font = GridFontBold;
             }
             else
             {
-                e.CellStyle.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+                e.CellStyle.Font = GridFontRegular;
             }
         }
 
