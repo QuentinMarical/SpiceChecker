@@ -291,9 +291,9 @@ public partial class MainViewModel : ObservableObject
         ApplyFilter();
     }
 
-    public void SetNiveauMin(NiveauAnomalie? niveau)
+    public void SetAnomaliesOnly(bool anomaliesOnly)
     {
-        CurrentFilter = CurrentFilter with { NiveauMin = niveau };
+        CurrentFilter = CurrentFilter with { AnomaliesOnly = anomaliesOnly };
         ApplyFilter();
     }
 

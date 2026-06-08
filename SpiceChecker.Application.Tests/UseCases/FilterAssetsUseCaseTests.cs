@@ -36,6 +36,19 @@ public sealed class FilterAssetsUseCaseTests
                                            a.Evaluation.Niveau == NiveauAnomalie.Bloquant));
     }
 
+    [Fact]
+    public void Execute_FiltersAnomaliesOnly_ExcludesAssetsWithoutEvaluation()
+    {
+        var useCase = new FilterAssetsUseCase();
+        var assets = CreateAssets();
+        var criteria = new FilterCriteria(AnomaliesOnly: true);
+
+        var result = useCase.Execute(assets, criteria);
+
+        result.Should().HaveCount(3);
+        result.Should().OnlyContain(a => a.Evaluation != null);
+    }
+
     private static IReadOnlyList<HardwareAsset> CreateAssets()
     {
         return new List<HardwareAsset>
@@ -73,7 +86,7 @@ public sealed class FilterAssetsUseCaseTests
             new()
             {
                 AssetTag = "A-003",
-                Categorie = CategorieEquipement.Peripherique,
+                Categorie = CategorieEquipement.Serveur,
                 Fabricant = "HP",
                 Modele = "Dock",
                 Commentaire = "HS",
@@ -88,7 +101,7 @@ public sealed class FilterAssetsUseCaseTests
             new()
             {
                 AssetTag = "A-004",
-                Categorie = CategorieEquipement.Autre,
+                Categorie = CategorieEquipement.Serveur,
                 Fabricant = "Acer",
                 Modele = "X",
                 Commentaire = "N/A",

@@ -41,6 +41,11 @@ public sealed class FilterAssetsUseCase : IFilterAssetsUseCase
             query = query.Where(a => Contains(a.Fabricant, fabricant));
         }
 
+        if (criteria.AnomaliesOnly)
+        {
+            query = query.Where(a => a.Evaluation is not null);
+        }
+
         if (criteria.NiveauMin.HasValue)
         {
             var threshold = GetSeverityRank(criteria.NiveauMin.Value);

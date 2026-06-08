@@ -27,7 +27,7 @@ public sealed class ProcessSpiceExportUseCaseTests
             new()
             {
                 AssetTag = "A-002",
-                Categorie = CategorieEquipement.Peripherique,
+                Categorie = CategorieEquipement.Serveur,
                 Fabricant = "HP",
                 Modele = "Dock",
                 RamGo = null,

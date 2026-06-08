@@ -16,12 +16,7 @@ public enum CategorieEquipement
     EquipementReseau,
 
     /// <summary>
-    /// Périphérique informatique (écran, clavier, etc.).
+    /// Serveurs et équipements assimilés.
     /// </summary>
-    Peripherique,
-
-    /// <summary>
-    /// Catégorie non classifiée explicitement.
-    /// </summary>
-    Autre
+    Serveur
 }

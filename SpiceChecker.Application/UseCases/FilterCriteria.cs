@@ -9,4 +9,5 @@ public sealed record FilterCriteria(
     string? SearchText = null,
     CategorieEquipement? Categorie = null,
     NiveauAnomalie? NiveauMin = null,
-    string? Fabricant = null);
+    string? Fabricant = null,
+    bool AnomaliesOnly = false);

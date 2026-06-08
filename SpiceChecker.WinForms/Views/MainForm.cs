@@ -24,7 +24,7 @@ public partial class MainForm : Form
     private Label _lblStatus = null!;
     private TextBox _txtSearch = null!;
     private ComboBox _cmbCategorie = null!;
-    private ComboBox _cmbNiveauMin = null!;
+    private CheckBox _chkAnomaliesOnly = null!;
     private ComboBox _cmbTheme = null!;
 
     public MainForm(MainViewModel viewModel)
@@ -86,16 +86,6 @@ public partial class MainForm : Form
             DropDownStyle = ComboBoxStyle.DropDownList
         };
 
-        var lblNiveau = new Label { Left = 632, Top = 58, Width = 74, Text = "Niveau min" };
-        _cmbNiveauMin = new ComboBox
-        {
-            Name = "cmbNiveauMin",
-            Left = 706,
-            Top = 54,
-            Width = 170,
-            DropDownStyle = ComboBoxStyle.DropDownList
-        };
-
         _btnExportCsv = new Button
         {
             Name = "btnExportCsv",
@@ -126,13 +116,23 @@ public partial class MainForm : Form
             Height = 26
         };
 
-        var lblTheme = new Label { Left = 990, Top = 58, Width = 52, Text = "Thème" };
+        _chkAnomaliesOnly = new CheckBox
+        {
+            Name = "chkAnomaliesOnly",
+            Left = 632,
+            Top = 57,
+            Width = 135,
+            Height = 22,
+            Text = "Anomalies seules"
+        };
+
+        var lblTheme = new Label { Left = 776, Top = 58, Width = 52, Text = "Thème" };
         _cmbTheme = new ComboBox
         {
             Name = "cmbTheme",
-            Left = 1042,
+            Left = 828,
             Top = 54,
-            Width = 130,
+            Width = 140,
             DropDownStyle = ComboBoxStyle.DropDownList
         };
 
@@ -159,6 +159,8 @@ public partial class MainForm : Form
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             MultiSelect = false
         };
+        _grid.DataBindingComplete += (_, _) => ConfigureGridColumns();
+        _grid.CellFormatting += OnGridCellFormatting;
 
         _gridMenu.Items.Add("Modifier le sous-état", null, OnEditSubStateMenuClick);
         _gridMenu.Items.Add("Copier", null, (_, _) => _viewModel.CopySelectionToClipboardCommand.Execute(null));
@@ -174,8 +176,7 @@ public partial class MainForm : Form
         Controls.Add(_txtSearch);
         Controls.Add(lblCategorie);
         Controls.Add(_cmbCategorie);
-        Controls.Add(lblNiveau);
-        Controls.Add(_cmbNiveauMin);
+        Controls.Add(_chkAnomaliesOnly);
         Controls.Add(lblTheme);
         Controls.Add(_cmbTheme);
         Controls.Add(_btnAppliquerFiltre);
@@ -191,18 +192,10 @@ public partial class MainForm : Form
         _progressBar.DataBindings.Add(nameof(ProgressBar.Value), _viewModel, nameof(MainViewModel.ProgressPercentage), false, DataSourceUpdateMode.OnPropertyChanged);
 
         _cmbCategorie.Items.Add("(toutes)");
-        foreach (var categorie in Enum.GetValues<CategorieEquipement>())
-        {
-            _cmbCategorie.Items.Add(categorie);
-        }
+        _cmbCategorie.Items.Add(CategorieEquipement.Ordinateur);
+        _cmbCategorie.Items.Add(CategorieEquipement.EquipementReseau);
+        _cmbCategorie.Items.Add(CategorieEquipement.Serveur);
         _cmbCategorie.SelectedIndex = 0;
-
-        _cmbNiveauMin.Items.Add("(tous)");
-        foreach (var niveau in Enum.GetValues<NiveauAnomalie>())
-        {
-            _cmbNiveauMin.Items.Add(niveau);
-        }
-        _cmbNiveauMin.SelectedIndex = 0;
 
         _cmbTheme.DataSource = _viewModel.AvailableThemes;
         if (!string.IsNullOrWhiteSpace(_viewModel.SelectedTheme))
@@ -246,10 +239,9 @@ public partial class MainForm : Form
             _viewModel.ApplyFilterCommand.Execute(null);
         };
 
-        _cmbNiveauMin.SelectedIndexChanged += (_, _) =>
+        _chkAnomaliesOnly.CheckedChanged += (_, _) =>
         {
-            var value = _cmbNiveauMin.SelectedItem is NiveauAnomalie n ? n : (NiveauAnomalie?)null;
-            _viewModel.SetNiveauMin(value);
+            _viewModel.SetAnomaliesOnly(_chkAnomaliesOnly.Checked);
             _viewModel.ApplyFilterCommand.Execute(null);
         };
 
@@ -301,6 +293,78 @@ public partial class MainForm : Form
     {
         _bindingSource.DataSource = _viewModel.FilteredAssets;
         _bindingSource.ResetBindings(false);
+    }
+
+    private void ConfigureGridColumns()
+    {
+        if (_grid.Columns.Count == 0)
+        {
+            return;
+        }
+
+        if (_grid.Columns[nameof(HardwareAsset.DateAcquisition)] is { } dateAcquisitionColumn)
+        {
+            dateAcquisitionColumn.Visible = false;
+        }
+
+        if (_grid.Columns[nameof(HardwareAsset.RamGo)] is { } ramColumn)
+        {
+            ramColumn.Visible = false;
+        }
+
+        if (_grid.Columns[nameof(HardwareAsset.DateRenouvellement)] is { } dateRenouvellementColumn)
+        {
+            dateRenouvellementColumn.HeaderText = "Date renouvellement";
+            dateRenouvellementColumn.DefaultCellStyle.Format = "dd/MM/yyyy";
+        }
+
+        if (_grid.Columns[nameof(HardwareAsset.DateDerniereModifSousEtat)] is { } dateDerniereModifColumn)
+        {
+            dateDerniereModifColumn.HeaderText = "Jours depuis modif sous-état";
+        }
+
+        if (_grid.Columns[nameof(HardwareAsset.Evaluation)] is { } evaluationColumn)
+        {
+            evaluationColumn.HeaderText = "Anomalie";
+        }
+    }
+
+    private static void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+    {
+        if (sender is not DataGridView grid || e.RowIndex < 0)
+        {
+            return;
+        }
+
+        if (grid.Columns[e.ColumnIndex].DataPropertyName == nameof(HardwareAsset.DateDerniereModifSousEtat))
+        {
+            if (e.Value is DateTime date)
+            {
+                e.Value = Math.Max(0, (DateTime.Today - date.Date).Days).ToString();
+                e.FormattingApplied = true;
+            }
+            else if (e.Value is DateTime nullableDate)
+            {
+                e.Value = Math.Max(0, (DateTime.Today - nullableDate.Date).Days).ToString();
+                e.FormattingApplied = true;
+            }
+
+            return;
+        }
+
+        if (grid.Columns[e.ColumnIndex].DataPropertyName == nameof(HardwareAsset.Evaluation))
+        {
+            if (e.Value is EvaluationResult evaluation)
+            {
+                e.Value = evaluation.Message;
+                e.FormattingApplied = true;
+            }
+            else
+            {
+                e.Value = string.Empty;
+                e.FormattingApplied = true;
+            }
+        }
     }
 
     protected override void Dispose(bool disposing)

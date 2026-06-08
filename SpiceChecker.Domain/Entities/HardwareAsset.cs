@@ -15,7 +15,7 @@ public sealed record HardwareAsset
     /// <summary>
     /// Catégorie métier de l'équipement.
     /// </summary>
-    public CategorieEquipement Categorie { get; init; } = CategorieEquipement.Autre;
+    public CategorieEquipement Categorie { get; init; } = CategorieEquipement.Serveur;
 
     /// <summary>
     /// Fabricant de l'équipement.
