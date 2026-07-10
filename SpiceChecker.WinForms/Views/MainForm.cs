@@ -90,30 +90,33 @@ public partial class MainForm : Form
         {
             Name = "btnExportCsv",
             Text = "Exporter CSV",
-            Left = 892,
+            Left = 880,
             Top = 12,
             Width = 110,
-            Height = 30
+            Height = 30,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
 
         _btnExportExcel = new Button
         {
             Name = "btnExportExcel",
             Text = "Exporter Excel",
-            Left = 1008,
+            Left = 996,
             Top = 12,
             Width = 120,
-            Height = 30
+            Height = 30,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
 
         _btnCopy = new Button
         {
             Name = "btnCopy",
             Text = "Copier",
-            Left = 892,
+            Left = 996,
             Top = 52,
-            Width = 90,
-            Height = 26
+            Width = 120,
+            Height = 26,
+            Anchor = AnchorStyles.Top | AnchorStyles.Right
         };
 
         _chkAnomaliesOnly = new CheckBox
@@ -140,10 +143,11 @@ public partial class MainForm : Form
         {
             Name = "btnAppliquerFiltre",
             Text = "Appliquer",
-            Left = 892,
-            Top = 12,
+            Left = 880,
+            Top = 52,
             Width = 90,
-            Height = 30
+            Height = 26,
+            Visible = false
         };
 
         _grid = new DataGridView
@@ -157,7 +161,10 @@ public partial class MainForm : Form
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            MultiSelect = false
+            MultiSelect = false,
+            RowHeadersVisible = false,
+            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
         };
         _grid.DataBindingComplete += (_, _) => ConfigureGridColumns();
         _grid.CellFormatting += OnGridCellFormatting;
@@ -302,31 +309,55 @@ public partial class MainForm : Form
             return;
         }
 
-        if (_grid.Columns[nameof(HardwareAsset.DateAcquisition)] is { } dateAcquisitionColumn)
-        {
-            dateAcquisitionColumn.Visible = false;
-        }
+        // Colonnes techniques masquées.
+        SetColumn(nameof(HardwareAsset.DateAcquisition), visible: false);
+        SetColumn(nameof(HardwareAsset.Etat), visible: false);
 
-        if (_grid.Columns[nameof(HardwareAsset.RamGo)] is { } ramColumn)
-        {
-            ramColumn.Visible = false;
-        }
+        // Colonnes visibles : libellé, largeur et ordre d'affichage.
+        var displayIndex = 0;
+        SetColumn(nameof(HardwareAsset.AssetTag), "Étiquette", 100, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.Categorie), "Catégorie", 110, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.Fabricant), "Fabricant", 85, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.Modele), "Modèle", 220, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.RamGo), "RAM (Go)", 65, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.SousEtat), "Sous-état", 140, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.Entrepot), "Entrepôt", 90, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.DateRenouvellement), "Renouvellement", 100, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.DateDerniereModifSousEtat), "Sous-état depuis (j)", 105, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.Commentaire), "Commentaire", 140, ref displayIndex);
+        SetColumn(nameof(HardwareAsset.Evaluation), "Résultat d'analyse", 320, ref displayIndex);
 
         if (_grid.Columns[nameof(HardwareAsset.DateRenouvellement)] is { } dateRenouvellementColumn)
         {
-            dateRenouvellementColumn.HeaderText = "Date renouvellement";
             dateRenouvellementColumn.DefaultCellStyle.Format = "dd/MM/yyyy";
-        }
-
-        if (_grid.Columns[nameof(HardwareAsset.DateDerniereModifSousEtat)] is { } dateDerniereModifColumn)
-        {
-            dateDerniereModifColumn.HeaderText = "Jours depuis modif sous-état";
         }
 
         if (_grid.Columns[nameof(HardwareAsset.Evaluation)] is { } evaluationColumn)
         {
-            evaluationColumn.HeaderText = "Anomalie";
+            evaluationColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            evaluationColumn.MinimumWidth = 260;
         }
+    }
+
+    private void SetColumn(string name, bool visible)
+    {
+        if (_grid.Columns[name] is { } column)
+        {
+            column.Visible = visible;
+        }
+    }
+
+    private void SetColumn(string name, string headerText, int width, ref int displayIndex)
+    {
+        if (_grid.Columns[name] is not { } column)
+        {
+            return;
+        }
+
+        column.HeaderText = headerText;
+        column.Width = width;
+        column.DisplayIndex = displayIndex;
+        displayIndex++;
     }
 
     private static void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -336,34 +367,76 @@ public partial class MainForm : Form
             return;
         }
 
-        if (grid.Columns[e.ColumnIndex].DataPropertyName == nameof(HardwareAsset.DateDerniereModifSousEtat))
+        // Teinte de fond de toute la ligne selon la sévérité de l'anomalie.
+        if (grid.Rows[e.RowIndex].DataBoundItem is HardwareAsset rowAsset)
         {
-            if (e.Value is DateTime date)
+            var backColor = rowAsset.Evaluation?.Niveau switch
             {
-                e.Value = Math.Max(0, (DateTime.Today - date.Date).Days).ToString();
-                e.FormattingApplied = true;
-            }
-            else if (e.Value is DateTime nullableDate)
-            {
-                e.Value = Math.Max(0, (DateTime.Today - nullableDate.Date).Days).ToString();
-                e.FormattingApplied = true;
-            }
+                NiveauAnomalie.Bloquant or NiveauAnomalie.Erreur => Color.FromArgb(255, 224, 224),
+                NiveauAnomalie.Avertissement => Color.FromArgb(255, 240, 214),
+                NiveauAnomalie.Info => Color.FromArgb(222, 237, 255),
+                _ => (Color?)null
+            };
 
-            return;
+            if (backColor.HasValue)
+            {
+                e.CellStyle!.BackColor = backColor.Value;
+                e.CellStyle.ForeColor = Color.Black;
+            }
         }
 
-        if (grid.Columns[e.ColumnIndex].DataPropertyName == nameof(HardwareAsset.Evaluation))
+        var propertyName = grid.Columns[e.ColumnIndex].DataPropertyName;
+
+        switch (propertyName)
         {
-            if (e.Value is EvaluationResult evaluation)
-            {
-                e.Value = evaluation.Message;
+            case nameof(HardwareAsset.SousEtat):
+                if (e.Value is SousEtat sousEtat)
+                {
+                    e.Value = sousEtat.Libelle();
+                    e.FormattingApplied = true;
+                }
+
+                break;
+
+            case nameof(HardwareAsset.Categorie):
+                if (e.Value is CategorieEquipement categorie)
+                {
+                    e.Value = categorie.Libelle();
+                    e.FormattingApplied = true;
+                }
+
+                break;
+
+            case nameof(HardwareAsset.DateDerniereModifSousEtat):
+                if (e.Value is DateTime date)
+                {
+                    e.Value = Math.Max(0, (DateTime.Today - date.Date).Days).ToString();
+                    e.FormattingApplied = true;
+                }
+
+                break;
+
+            case nameof(HardwareAsset.Evaluation):
+                if (e.Value is EvaluationResult evaluation)
+                {
+                    var prefix = evaluation.Niveau switch
+                    {
+                        NiveauAnomalie.Bloquant => "⛔ Bloquant — ",
+                        NiveauAnomalie.Erreur => "🔴 Erreur — ",
+                        NiveauAnomalie.Avertissement => "🟠 Avertissement — ",
+                        NiveauAnomalie.Info => "🔵 Info — ",
+                        _ => string.Empty
+                    };
+
+                    e.Value = prefix + evaluation.Message;
+                }
+                else
+                {
+                    e.Value = "✔ Conforme";
+                }
+
                 e.FormattingApplied = true;
-            }
-            else
-            {
-                e.Value = string.Empty;
-                e.FormattingApplied = true;
-            }
+                break;
         }
     }
 
