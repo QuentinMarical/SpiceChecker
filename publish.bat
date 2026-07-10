@@ -2,46 +2,44 @@
 setlocal
 
 echo ============================================
-echo   SPICE CHECKER — Packaging .NET 10 (win-x64)
+echo SPICE CHECKER — Publication WinForms .NET 10
 echo ============================================
 echo.
 
-REM Trouver le fichier projet
-if exist "SpiceChecker.csproj" (
-    set PROJECT=SpiceChecker.csproj
-) else if exist "*.sln" (
-    for %%f in (*.sln) do set PROJECT=%%f
-) else (
-    echo ERREUR : Aucun fichier .csproj ou .sln trouve dans le repertoire courant.
-    echo Lancez ce script depuis le dossier du projet.
+set PROJECT=SpiceChecker.WinForms\SpiceChecker.WinForms.csproj
+set OUTPUT=publish_output
+
+if not exist "%PROJECT%" (
+    echo ERREUR : Projet introuvable : %PROJECT%
+    echo Lancez ce script depuis la racine du depot.
     exit /b 1
 )
 
-echo Projet detecte : %PROJECT%
+echo Projet cible : %PROJECT%
 echo.
 
 echo [1/4] Nettoyage de la sortie precedente...
-if exist "publish_output" rmdir /s /q "publish_output"
+if exist "%OUTPUT%" rmdir /s /q "%OUTPUT%"
 
 echo [2/4] Restauration des packages...
-dotnet restore %PROJECT%
+dotnet restore "%PROJECT%"
 if errorlevel 1 (
     echo ERREUR : dotnet restore a echoue.
     exit /b 1
 )
 
 echo [3/4] Build du projet...
-dotnet build %PROJECT% -c Release --no-restore
+dotnet build "%PROJECT%" -c Release --no-restore
 if errorlevel 1 (
     echo ERREUR : dotnet build a echoue.
     exit /b 1
 )
 
 echo [4/4] Publication en single-file self-contained...
-dotnet publish %PROJECT% -c Release -r win-x64 --self-contained true ^
+dotnet publish "%PROJECT%" -c Release -r win-x64 --self-contained true ^
     -p:PublishSingleFile=true ^
     -p:RuntimeIdentifier=win-x64 ^
-    -o "publish_output"
+    -o "%OUTPUT%"
 if errorlevel 1 (
     echo ERREUR : dotnet publish a echoue.
     exit /b 1
@@ -49,7 +47,7 @@ if errorlevel 1 (
 
 echo.
 echo ============================================
-echo   Packaging termine avec succes !
-echo   Executable : publish_output\SpiceChecker.exe
+echo Publication terminee avec succes !
+echo Executable : %OUTPUT%\SpiceChecker.WinForms.exe
 echo ============================================
 pause
