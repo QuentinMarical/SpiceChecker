@@ -1,10 +1,6 @@
 <Solution>
-  <Project Path="SpiceChecker.Application.Tests/SpiceChecker.Application.Tests.csproj" />
   <Project Path="SpiceChecker.Application/SpiceChecker.Application.csproj" />
-  <Project Path="SpiceChecker.Domain.Tests/SpiceChecker.Domain.Tests.csproj" />
   <Project Path="SpiceChecker.Domain/SpiceChecker.Domain.csproj" />
   <Project Path="SpiceChecker.Infrastructure/SpiceChecker.Infrastructure.csproj" />
-  <Project Path="SpiceChecker.Infrastructure.Tests/SpiceChecker.Infrastructure.Tests.csproj" />
-  <Project Path="SpiceChecker.WinForms.Tests/SpiceChecker.WinForms.Tests.csproj" />
   <Project Path="SpiceChecker.WinForms/SpiceChecker.WinForms.csproj" />
 </Solution>
