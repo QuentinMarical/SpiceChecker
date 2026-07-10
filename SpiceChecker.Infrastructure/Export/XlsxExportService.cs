@@ -25,7 +25,7 @@ public sealed class XlsxExportService : IExportService
 
             var headers = new[]
             {
-                "AssetTag", "Categorie", "Fabricant", "Modele", "RamGo", "SousEtat", "Commentaire", "NiveauAnomalie", "MessageAnomalie"
+                "Étiquette", "Catégorie", "Fabricant", "Modèle", "RAM (Go)", "Sous-état", "Entrepôt", "Renouvellement", "Commentaire", "Niveau", "Résultat d'analyse"
             };
 
             for (var i = 0; i < headers.Length; i++)
@@ -47,16 +47,18 @@ public sealed class XlsxExportService : IExportService
                 var excelRow = row + 2;
 
                 worksheet.Cell(excelRow, 1).Value = asset.AssetTag;
-                worksheet.Cell(excelRow, 2).Value = asset.Categorie.ToString();
+                worksheet.Cell(excelRow, 2).Value = asset.Categorie.Libelle();
                 worksheet.Cell(excelRow, 3).Value = asset.Fabricant;
                 worksheet.Cell(excelRow, 4).Value = asset.Modele;
                 worksheet.Cell(excelRow, 5).Value = asset.RamGo;
-                worksheet.Cell(excelRow, 6).Value = asset.SousEtat.ToString();
-                worksheet.Cell(excelRow, 7).Value = asset.Commentaire;
-                worksheet.Cell(excelRow, 8).Value = evaluation?.Niveau.ToString() ?? string.Empty;
-                worksheet.Cell(excelRow, 9).Value = evaluation?.Message ?? string.Empty;
+                worksheet.Cell(excelRow, 6).Value = asset.SousEtat.Libelle();
+                worksheet.Cell(excelRow, 7).Value = asset.Entrepot;
+                worksheet.Cell(excelRow, 8).Value = asset.DateRenouvellement?.ToString("dd/MM/yyyy") ?? string.Empty;
+                worksheet.Cell(excelRow, 9).Value = asset.Commentaire;
+                worksheet.Cell(excelRow, 10).Value = evaluation?.Niveau.ToString() ?? string.Empty;
+                worksheet.Cell(excelRow, 11).Value = evaluation?.Message ?? string.Empty;
 
-                ApplySeverityColor(worksheet.Cell(excelRow, 8), evaluation?.Niveau);
+                ApplySeverityColor(worksheet.Cell(excelRow, 10), evaluation?.Niveau);
             }
 
             worksheet.Columns().AdjustToContents();
