@@ -9,12 +9,15 @@ namespace SpiceChecker.Domain.Validation;
 /// </summary>
 public sealed class DefectCommentValidator : IDefectCommentValidator
 {
-    private static readonly string[] ForbiddenTerms =
+    private static readonly string[] RepairTerms =
     {
         "a reparer",
-        "en panne",
-        "reparation"
+        "reparation",
+        "renvoyer en repar",
+        "retour sav"
     };
+
+    private const int LongueurMinimaleCommentairePanne = 10;
 
     /// <inheritdoc />
     public ValidationResult Validate(string commentaire, SousEtat sousEtat)
@@ -23,21 +26,26 @@ public sealed class DefectCommentValidator : IDefectCommentValidator
 
         if (sousEtat == SousEtat.Defectueux && string.IsNullOrWhiteSpace(value))
         {
-            return ValidationResult.Failure("Un commentaire est obligatoire pour le sous-état Défectueux.");
+            return ValidationResult.Failure("Commentaire de panne obligatoire pour le sous-état Défectueux (nature de la panne).");
         }
 
-        var normalized = Normalize(value);
-        if (ContainsForbiddenTerm(normalized))
+        if (sousEtat == SousEtat.Defectueux && value.Trim().Length < LongueurMinimaleCommentairePanne)
         {
-            return ValidationResult.Failure("Le commentaire ne doit pas contenir de termes liés à la réparation. Utilisez le sous-état \"Défectueux\".");
+            return ValidationResult.Failure($"Commentaire de panne trop court (minimum {LongueurMinimaleCommentairePanne} caractères) : décrire la nature de la panne.");
+        }
+
+        // Un matériel destiné à la réparation ne doit pas être en Revalorisation.
+        if (sousEtat == SousEtat.Revalorisation && ContainsRepairTerm(Normalize(value)))
+        {
+            return ValidationResult.Failure("Le commentaire indique une réparation : ce matériel doit partir en Réparation, pas en Revalorisation.");
         }
 
         return ValidationResult.Success();
     }
 
-    private static bool ContainsForbiddenTerm(string normalizedComment)
+    private static bool ContainsRepairTerm(string normalizedComment)
     {
-        foreach (var term in ForbiddenTerms)
+        foreach (var term in RepairTerms)
         {
             if (normalizedComment.Contains(term, StringComparison.Ordinal))
             {
