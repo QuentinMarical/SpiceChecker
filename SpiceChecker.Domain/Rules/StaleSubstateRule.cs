@@ -4,7 +4,8 @@ using SpiceChecker.Domain.Enums;
 namespace SpiceChecker.Domain.Rules;
 
 /// <summary>
-/// Détecte les sous-états sensibles inchangés depuis plus de 6 mois.
+/// Détecte les sous-états transitoires inchangés depuis plus de 6 mois
+/// (les stocks doivent être nettoyés régulièrement).
 /// </summary>
 public sealed class StaleSubstateRule : IRule
 {
@@ -23,16 +24,21 @@ public sealed class StaleSubstateRule : IRule
             return null;
         }
 
-        var ageInDays = (DateTime.Today - asset.DateDerniereModifSousEtat.Value.Date).TotalDays;
-        var isEligibleSubstate = asset.SousEtat is SousEtat.RepriseEnAttente or SousEtat.Revalorisation;
+        var ageInDays = (int)(DateTime.Today - asset.DateDerniereModifSousEtat.Value.Date).TotalDays;
+        var isTransientSubstate = asset.SousEtat is SousEtat.Revalorisation
+            or SousEtat.RepriseEnAttente
+            or SousEtat.ABlanchir
+            or SousEtat.EnAttenteDeDon
+            or SousEtat.Defectueux
+            or SousEtat.EnReparation;
 
-        if (ageInDays > StaleThresholdDays && isEligibleSubstate)
+        if (ageInDays > StaleThresholdDays && isTransientSubstate)
         {
             return new EvaluationResult
             {
                 Niveau = NiveauAnomalie.Info,
                 RegleDeclenchee = Name,
-                Message = "Sous-état inchangé depuis plus de 6 mois, à vérifier.",
+                Message = $"Sous-état « {asset.SousEtat.Libelle()} » inchangé depuis {ageInDays} jours (plus de 6 mois) : à vérifier.",
                 EstBloquant = false
             };
         }
