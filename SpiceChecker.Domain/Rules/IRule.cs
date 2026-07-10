@@ -13,10 +13,13 @@ public interface IRule
     string Name { get; }
 
     /// <summary>
-    /// Évalue l'équipement et retourne un résultat d'anomalie si la règle est déclenchée.
-    /// Retourne <see langword="null"/> si aucune anomalie n'est détectée.
+    /// Indique qu'une règle peut court-circuiter les suivantes lorsqu'elle s'applique sans anomalie.
     /// </summary>
-    /// <param name="asset">Équipement à évaluer.</param>
-    /// <returns>Le résultat d'évaluation, ou <see langword="null"/> si la règle ne déclenche pas.</returns>
+    bool IsOverride => false;
+
+    /// <summary>
+    /// Évalue l'équipement et retourne un résultat d'anomalie si la règle est déclenchée.
+    /// Retourne null si aucune anomalie n'est détectée.
+    /// </summary>
     EvaluationResult? Evaluate(HardwareAsset asset);
 }
