@@ -1,7 +1,7 @@
 namespace SpiceChecker.Domain.Enums;
 
 /// <summary>
-/// Représente le sous-état métier d'un équipement.
+/// Représente le sous-état métier d'un équipement (aligné sur les sous-états SPICE / ServiceNow).
 /// </summary>
 public enum SousEtat
 {
@@ -11,14 +11,29 @@ public enum SousEtat
     DisponibleNeuf,
 
     /// <summary>
-    /// Équipement disponible (re-use ou disponibilité standard).
+    /// Équipement disponible Re-Use (réutilisable immédiatement).
     /// </summary>
     Disponible,
 
     /// <summary>
-    /// Équipement orienté revalorisation.
+    /// Équipement orienté revalorisation (Déclassé, Retour loueur).
     /// </summary>
     Revalorisation,
+
+    /// <summary>
+    /// Équipement réservé / masterisé (stock bloqué pour un usage spécifique).
+    /// </summary>
+    ReserveMasterise,
+
+    /// <summary>
+    /// Équipement à blanchir avant remise en Disponible Re-Use.
+    /// </summary>
+    ABlanchir,
+
+    /// <summary>
+    /// Équipement en attente de don (sortie de parc).
+    /// </summary>
+    EnAttenteDeDon,
 
     /// <summary>
     /// Équipement en attente de reprise.
