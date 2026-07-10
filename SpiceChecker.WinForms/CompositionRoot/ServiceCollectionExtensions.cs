@@ -36,11 +36,14 @@ public static class ServiceCollectionExtensions
 
         services.AddTransient<IDefectCommentValidator, DefectCommentValidator>();
 
+        // L'ordre d'enregistrement définit la priorité d'évaluation (la première règle qui répond gagne).
         services.AddTransient<IRule, HighRamLenovoRule>();
-        services.AddTransient<IRule, DefectiveStateRule>();
+        services.AddTransient<IRule, L13L14RenewalRule>();
+        services.AddTransient<IRule, RevalorisationAutomatiqueRule>();
         services.AddTransient<IRule, RevalorisationRule>();
         services.AddTransient<IRule, RevalorisationSansDefautRule>();
-        services.AddTransient<IRule, L13L14RenewalRule>();
+        services.AddTransient<IRule, DefectiveStateRule>();
+        services.AddTransient<IRule, BlanchimentRule>();
         services.AddTransient<IRule, StaleSubstateRule>();
 
         services.AddTransient<IProcessSpiceExportUseCase, ProcessSpiceExportUseCase>();
