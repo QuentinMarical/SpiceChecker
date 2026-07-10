@@ -48,6 +48,16 @@ public sealed record HardwareAsset
     public DateTime? DateDerniereModifSousEtat { get; init; }
 
     /// <summary>
+    /// État SPICE de l'équipement (ex. "En stock").
+    /// </summary>
+    public string Etat { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Entrepôt de rattachement de l'équipement (ex. "OUE-ROUEN").
+    /// </summary>
+    public string Entrepot { get; init; } = string.Empty;
+
+    /// <summary>
     /// Sous-état métier courant de l'équipement.
     /// </summary>
     public SousEtat SousEtat { get; init; } = SousEtat.Autre;
