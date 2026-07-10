@@ -1,62 +1,56 @@
 # SpiceChecker
 
-SpiceChecker est une application Windows Forms destinée à l’analyse et au contrôle de données d’inventaire/export, avec import Excel, règles métier et filtres d’anomalies.
+SpiceChecker est une application Windows Forms destinée au contrôle et à l’analyse de données métier, avec une architecture .NET découpée en plusieurs projets.
 
-## Structure du dépôt
+## Architecture active
 
-Le dépôt contient actuellement deux générations d’architecture :
-
-### Architecture active
-
-La structure active du projet repose sur plusieurs projets .NET séparés :
+La structure actuellement utilisée par la solution est la suivante :
 
 - `SpiceChecker.Domain` : entités et logique métier centrale
-- `SpiceChecker.Application` : cas d’usage et services applicatifs
-- `SpiceChecker.Infrastructure` : accès aux données et implémentations techniques
+- `SpiceChecker.Application` : services applicatifs et cas d’usage
+- `SpiceChecker.Infrastructure` : implémentations techniques et accès aux données
 - `SpiceChecker.WinForms` : interface utilisateur Windows Forms
-- `SpiceChecker.*.Tests` : projets de tests associés
+- `SpiceChecker.Application.Tests`
+- `SpiceChecker.Domain.Tests`
+- `SpiceChecker.Infrastructure.Tests`
+- `SpiceChecker.WinForms.Tests`
 
-Le point d’entrée principal de l’application se trouve dans :
+La solution XML `SpiceChecker.slnx` référence uniquement cette architecture multi-projets.
+
+## Point d’entrée principal
+
+Le projet à utiliser pour lancer l’application est :
+
+- `SpiceChecker.WinForms/SpiceChecker.WinForms.csproj`
+
+Le point d’entrée principal se trouve dans :
 
 - `SpiceChecker.WinForms/Program.cs`
 
-## Éléments legacy
+## Éléments historiques
 
-Le dépôt contient encore plusieurs fichiers et dossiers historiques à la racine :
+Le dépôt a contenu une ancienne structure monolithique à la racine.  
+Les éléments suivants doivent être considérés comme historiques ou en cours de retrait :
 
 - `Program.cs`
 - `SpiceChecker.csproj`
-- `SpiceChecker - old (à conserver).csproj`
+- `Probe.cs`
+- `publish.bat`
 - `Controls/`
 - `Forms/`
 - `Models/`
 - `Rules/`
 - `Services/`
-- `publish.bat`
 
-Ces éléments correspondent à l’ancienne structure monolithique du projet. Ils sont conservés temporairement pendant la transition, mais ne constituent plus la cible recommandée pour les évolutions futures.
+Ces éléments ne font pas partie de la solution moderne référencée par `SpiceChecker.slnx`.
 
 ## Build recommandé
-
-Utiliser le projet WinForms moderne :
 
 ```powershell
 dotnet restore SpiceChecker.WinForms/SpiceChecker.WinForms.csproj
 dotnet build SpiceChecker.WinForms/SpiceChecker.WinForms.csproj -c Release
 ```
 
-## Publication
+## Objectif du dépôt
 
-Le script `publish.bat` est prévu pour publier explicitement le projet `SpiceChecker.WinForms`.
-
-## Objectif du nettoyage
-
-À terme, le dépôt a vocation à :
-- documenter clairement l’architecture active ;
-- isoler ou supprimer les artefacts legacy ;
-- simplifier l’ouverture du projet dans Visual Studio ;
-- éviter toute ambiguïté entre ancien et nouveau point d’entrée.
-
-## État actuel
-
-Le dépôt est fonctionnel, mais un nettoyage progressif de la racine est encore nécessaire pour rendre la structure plus lisible.
+L’objectif est de poursuivre la migration vers une structure claire, testable et maintenable, en éliminant progressivement les artefacts hérités de l’ancienne version.
