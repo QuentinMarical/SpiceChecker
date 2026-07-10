@@ -27,6 +27,9 @@ public sealed class FilterAssetsUseCase : IFilterAssetsUseCase
             query = query.Where(a =>
                 Contains(a.AssetTag, search)
                 || Contains(a.Modele, search)
+                || Contains(a.Fabricant, search)
+                || Contains(a.Entrepot, search)
+                || Contains(a.SousEtat.Libelle(), search)
                 || Contains(a.Commentaire, search));
         }
 
