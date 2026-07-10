@@ -19,10 +19,10 @@ public sealed class RevalorisationSansDefautRule : IRule
         "casse"
     };
 
-    /// <inheritdoc />
     public string Name => "RevalorisationSansDefautRule";
 
-    /// <inheritdoc />
+    public bool IsOverride => false;
+
     public EvaluationResult? Evaluate(HardwareAsset asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
@@ -37,8 +37,9 @@ public sealed class RevalorisationSansDefautRule : IRule
         }
 
         var normalizedComment = Normalize(asset.Commentaire);
-        var hasDefectJustification = !string.IsNullOrWhiteSpace(normalizedComment)
-                                     && ContainsAnyKeyword(normalizedComment, DefectKeywords);
+        var hasDefectJustification =
+            !string.IsNullOrWhiteSpace(normalizedComment) &&
+            ContainsAnyKeyword(normalizedComment, DefectKeywords);
 
         if (!hasDefectJustification)
         {
@@ -46,7 +47,7 @@ public sealed class RevalorisationSansDefautRule : IRule
             {
                 Niveau = NiveauAnomalie.Erreur,
                 RegleDeclenchee = Name,
-                Message = "Un ordinateur ne peut être en revalorisation sans justification de défaut.",
+                Message = "Un ordinateur ne peut être en Revalorisation sans justification explicite de défaut.",
                 EstBloquant = true
             };
         }
