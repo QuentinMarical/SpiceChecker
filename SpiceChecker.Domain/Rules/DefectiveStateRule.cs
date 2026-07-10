@@ -21,19 +21,15 @@ public sealed class DefectiveStateRule : IRule
 
     private readonly IDefectCommentValidator _defectCommentValidator;
 
-    /// <summary>
-    /// Initialise une nouvelle instance de la règle.
-    /// </summary>
-    /// <param name="defectCommentValidator">Validateur centralisé de commentaire de panne.</param>
     public DefectiveStateRule(IDefectCommentValidator defectCommentValidator)
     {
         _defectCommentValidator = defectCommentValidator ?? throw new ArgumentNullException(nameof(defectCommentValidator));
     }
 
-    /// <inheritdoc />
     public string Name => "DefectiveStateRule";
 
-    /// <inheritdoc />
+    public bool IsOverride => false;
+
     public EvaluationResult? Evaluate(HardwareAsset asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
