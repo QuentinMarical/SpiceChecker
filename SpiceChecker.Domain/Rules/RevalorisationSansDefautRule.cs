@@ -6,7 +6,8 @@ using SpiceChecker.Domain.Enums;
 namespace SpiceChecker.Domain.Rules;
 
 /// <summary>
-/// Interdit la revalorisation d'un ordinateur sans justification explicite de défaut.
+/// Tout ordinateur en Revalorisation doit être défectueux et porter un commentaire
+/// indiquant la nature de la panne, sinon il doit être requalifié en Disponible Re-Use.
 /// </summary>
 public sealed class RevalorisationSansDefautRule : IRule
 {
@@ -16,7 +17,25 @@ public sealed class RevalorisationSansDefautRule : IRule
         "defectueux",
         "panne",
         "hs",
-        "casse"
+        "casse",
+        "ecran",
+        "dalle",
+        "clavier",
+        "batterie",
+        "charniere",
+        "chute",
+        "oxyd",
+        "demarre",
+        "allume",
+        "carte mere",
+        "disque",
+        "ssd",
+        "ventil",
+        "connecteur",
+        "port",
+        "tactile",
+        "bios",
+        "alim"
     };
 
     public string Name => "RevalorisationSansDefautRule";
@@ -37,17 +56,25 @@ public sealed class RevalorisationSansDefautRule : IRule
         }
 
         var normalizedComment = Normalize(asset.Commentaire);
-        var hasDefectJustification =
-            !string.IsNullOrWhiteSpace(normalizedComment) &&
-            ContainsAnyKeyword(normalizedComment, DefectKeywords);
 
-        if (!hasDefectJustification)
+        if (string.IsNullOrWhiteSpace(normalizedComment))
+        {
+            return new EvaluationResult
+            {
+                Niveau = NiveauAnomalie.Avertissement,
+                RegleDeclenchee = Name,
+                Message = "Revalorisation sans commentaire de panne dans l'export : vérifier dans ServiceNow que la nature de la panne est renseignée (obligatoire), sinon requalifier en Disponible Re-Use.",
+                EstBloquant = false
+            };
+        }
+
+        if (!ContainsAnyKeyword(normalizedComment, DefectKeywords))
         {
             return new EvaluationResult
             {
                 Niveau = NiveauAnomalie.Erreur,
                 RegleDeclenchee = Name,
-                Message = "Un ordinateur ne peut être en Revalorisation sans justification explicite de défaut.",
+                Message = "Revalorisation sans justification de défaut dans le commentaire : compléter la nature de la panne ou requalifier en Disponible Re-Use.",
                 EstBloquant = true
             };
         }
