@@ -1,17 +1,25 @@
 using SpiceChecker.Domain.Entities;
 using SpiceChecker.Domain.Enums;
+using SpiceChecker.Domain.Validation;
 
 namespace SpiceChecker.Domain.Rules;
 
 /// <summary>
-/// Détecte les équipements en revalorisation, avec exclusion explicite de la catégorie réseau.
+/// Vérifie la cohérence minimale d'un équipement en Revalorisation.
 /// </summary>
 public sealed class RevalorisationRule : IRule
 {
-    /// <inheritdoc />
+    private readonly IDefectCommentValidator _defectCommentValidator;
+
+    public RevalorisationRule(IDefectCommentValidator defectCommentValidator)
+    {
+        _defectCommentValidator = defectCommentValidator ?? throw new ArgumentNullException(nameof(defectCommentValidator));
+    }
+
     public string Name => "RevalorisationRule";
 
-    /// <inheritdoc />
+    public bool IsOverride => false;
+
     public EvaluationResult? Evaluate(HardwareAsset asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
@@ -21,14 +29,20 @@ public sealed class RevalorisationRule : IRule
             return null;
         }
 
-        if (asset.SousEtat == SousEtat.Revalorisation)
+        if (asset.SousEtat != SousEtat.Revalorisation)
+        {
+            return null;
+        }
+
+        var validation = _defectCommentValidator.Validate(asset.Commentaire, asset.SousEtat);
+        if (!validation.IsValid)
         {
             return new EvaluationResult
             {
-                Niveau = NiveauAnomalie.Info,
+                Niveau = NiveauAnomalie.Erreur,
                 RegleDeclenchee = Name,
-                Message = "Revalorisation à envisager pour cet équipement.",
-                EstBloquant = false
+                Message = validation.ErrorMessage,
+                EstBloquant = true
             };
         }
 
