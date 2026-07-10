@@ -97,7 +97,6 @@ public sealed class HardwareImportService : IHardwareImportService
             var etatValue = GetValue(rowValues, ColumnKind.Etat);
             var entrepotValue = GetValue(rowValues, ColumnKind.Entrepot);
             var sousEtatValue = GetEffectiveSousEtat(GetValue(rowValues, ColumnKind.SousEtat), etatValue);
-            var commentaire = BuildCommentaire(GetValue(rowValues, ColumnKind.Commentaire), etatValue, entrepotValue);
 
             var asset = new HardwareAsset
             {
@@ -109,8 +108,10 @@ public sealed class HardwareImportService : IHardwareImportService
                 DateAcquisition = ParseDate(rowValues, ColumnKind.DateAcquisition),
                 DateRenouvellement = ParseDate(rowValues, ColumnKind.DateRenouvellement),
                 DateDerniereModifSousEtat = ParseDate(rowValues, ColumnKind.DateDerniereModifSousEtat),
+                Etat = etatValue,
+                Entrepot = entrepotValue,
                 SousEtat = ParseSousEtat(sousEtatValue),
-                Commentaire = commentaire
+                Commentaire = GetValue(rowValues, ColumnKind.Commentaire)
             };
 
             assets.Add(asset);
@@ -227,15 +228,14 @@ public sealed class HardwareImportService : IHardwareImportService
             || header.Contains("renewal"))
             return ColumnKind.DateRenouvellement;
 
-        if (header.Contains("datechangementsousetat")
-            || header.Contains("datedernierchangementsousetat")
-            || header.Contains("datesousetat")
+        // Doit être testé AVANT SousEtat/Etat : l'export SPICE contient une colonne
+        // « Date dernier sous état » qui contient aussi le mot « sous état ».
+        if ((header.Contains("date") && header.Contains("sousetat"))
+            || (header.Contains("date") && header.Contains("etat") && header.Contains("dernier"))
             || header.Contains("lastsubstatechange")
             || header.Contains("datesubstate")
             || header.Contains("lastupdate")
             || header.Contains("datemodif")
-            || header.Contains("datedernieremodifsousetat")
-            || header.Contains("datedernieretat")
             || header.Contains("datechangement")
             || (header.Contains("date") && header.Contains("modif")))
             return ColumnKind.DateDerniereModifSousEtat;
@@ -365,31 +365,29 @@ public sealed class HardwareImportService : IHardwareImportService
             break;
         }
 
+        // 1) Nombre juste après le marqueur CPU (« L13 G1 I5 8 », « L14 G4 R5 16 256Go ») :
+        //    c'est toujours la RAM, le stockage vient après avec un suffixe Go.
         if (!ramGo.HasValue)
         {
-            var explicitRamMatch = Regex.Match(trimmedModele, @"(?i)\b(?<ram>4|8|12|16|24|32|48|64|96|128|192|256|384|512|768|1024)\s*(go|gb|g)\b");
-            if (explicitRamMatch.Success
-                && int.TryParse(explicitRamMatch.Groups["ram"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var explicitRam)
-                && explicitRam > 0
-                && explicitRam <= 1024)
+            var cpuRamMatch = Regex.Match(trimmedModele, @"\b(I3|I5|I7|I9|R3|R5|R7|R9|U5|U7)\s+(4|8|12|16|24|32|48|64)\b", RegexOptions.IgnoreCase);
+            if (cpuRamMatch.Success
+                && int.TryParse(cpuRamMatch.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cpuRam))
             {
-                ramGo = explicitRam;
+                ramGo = cpuRam;
             }
         }
 
+        // 2) Sinon, premier jeton « NN Go » plausible comme RAM (« 8Go 256Go », « 32Go 512Go ») :
+        //    au-delà de 64 Go, c'est du stockage sur ce parc.
         if (!ramGo.HasValue)
         {
-            var cpuRamMatch = Regex.Match(trimmedModele, @"\b(I3|I5|I7|I9|R3|R5|R7|R9)\s+(8|12|16|24|32|48|64)\b", RegexOptions.IgnoreCase);
-            if (cpuRamMatch.Success
-                && int.TryParse(cpuRamMatch.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cpuRam)
-                && cpuRam > 0
-                && cpuRam <= 128)
+            foreach (Match capacityMatch in Regex.Matches(trimmedModele, @"(?i)\b(?<val>\d{1,4})\s*(go|gb)\b"))
             {
-                var storageSuffix = trimmedModele[(cpuRamMatch.Index + cpuRamMatch.Length)..].Trim();
-                if (string.IsNullOrWhiteSpace(storageSuffix)
-                    || !Regex.IsMatch(storageSuffix, @"(?i)^\d+\s*(go|gb|g|to|tb)\b"))
+                if (int.TryParse(capacityMatch.Groups["val"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var capacity)
+                    && capacity is >= 4 and <= 64)
                 {
-                    ramGo = cpuRam;
+                    ramGo = capacity;
+                    break;
                 }
             }
         }
@@ -422,27 +420,6 @@ public sealed class HardwareImportService : IHardwareImportService
         return etat;
     }
 
-    private static string BuildCommentaire(string commentaire, string etat, string entrepot)
-    {
-        if (!string.IsNullOrWhiteSpace(commentaire))
-        {
-            return commentaire;
-        }
-
-        var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(etat))
-        {
-            parts.Add($"État: {etat}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(entrepot))
-        {
-            parts.Add($"Entrepôt: {entrepot}");
-        }
-
-        return string.Join(" | ", parts);
-    }
-
     private static SousEtat ParseSousEtat(string value)
     {
         var normalized = Normalize(value);
@@ -453,16 +430,22 @@ public sealed class HardwareImportService : IHardwareImportService
         if (normalized.Contains("disponibleneuf") || normalized == "neuf")
             return SousEtat.DisponibleNeuf;
 
+        if (normalized.Contains("blanchir"))
+            return SousEtat.ABlanchir;
+
+        if (normalized.Contains("don"))
+            return SousEtat.EnAttenteDeDon;
+
         if (normalized.Contains("reserve") || normalized.Contains("masterise"))
+            return SousEtat.ReserveMasterise;
+
+        if (normalized.Contains("reprise"))
             return SousEtat.RepriseEnAttente;
 
-        if (normalized.Contains("repriseenattente"))
-            return SousEtat.RepriseEnAttente;
-
-        if (normalized.Contains("revalorisation") || normalized.Contains("dclass") || normalized.Contains("retourloueur"))
+        if (normalized.Contains("revalorisation") || normalized.Contains("dclass") || normalized.Contains("declasse") || normalized.Contains("retourloueur"))
             return SousEtat.Revalorisation;
 
-        if (normalized.Contains("defectueux") || normalized.Contains("defect") || normalized.Contains("hs") || normalized.Contains("panne") || normalized.Contains("casse"))
+        if (normalized.Contains("defectueux") || normalized.Contains("defect") || normalized == "hs" || normalized.Contains("panne") || normalized.Contains("casse"))
             return SousEtat.Defectueux;
 
         if (normalized.Contains("reparation") || normalized.Contains("reparer"))
