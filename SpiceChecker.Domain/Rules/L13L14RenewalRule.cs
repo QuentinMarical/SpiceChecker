@@ -4,10 +4,10 @@ using SpiceChecker.Domain.Enums;
 namespace SpiceChecker.Domain.Rules;
 
 /// <summary>
-/// Applique les règles métier Lenovo L13/L14 8 Go :
-/// - L13 G1 défectueux => Revalorisation obligatoire
-/// - L13 G2 / L14 défectueux => Revalorisation si renouvellement <= 2027, sinon Réparation
-/// - Fonctionnels => Re-Use
+/// Règles Lenovo L13/L14 8 Go (consignes Enedis depuis le 1er avril 2026) :
+/// - Fonctionnels => Disponible Re-Use, peu importe la date de renouvellement (plus de remise en stock classique).
+/// - L13 G1 défectueux => Revalorisation obligatoire (avec commentaire de panne).
+/// - L13 G2 / L14 défectueux => renouvellement 2027 ou avant => Revalorisation, 2028 ou après => Réparation.
 /// </summary>
 public sealed class L13L14RenewalRule : IRule
 {
@@ -35,53 +35,41 @@ public sealed class L13L14RenewalRule : IRule
         }
 
         var model = asset.Modele ?? string.Empty;
-        var isDefective = asset.SousEtat == SousEtat.Defectueux;
-        var isInRevalorisation = asset.SousEtat == SousEtat.Revalorisation;
-        var isInRepair = IsRepairSubstate(asset.SousEtat);
+        var modelLabel = BuildModelLabel(model);
 
+        switch (asset.SousEtat)
+        {
+            case SousEtat.DisponibleNeuf:
+                return new EvaluationResult
+                {
+                    Niveau = NiveauAnomalie.Avertissement,
+                    RegleDeclenchee = Name,
+                    Message = $"{modelLabel} 8 Go en Disponible neuf : plus de remise en stock classique, un {modelLabel} fonctionnel doit être en Disponible Re-Use (incident modèle équivalent/inférieur ou contrat court).",
+                    EstBloquant = false
+                };
+
+            case SousEtat.Defectueux:
+                return EvaluateDefectueux(asset, modelLabel, model);
+
+            case SousEtat.Revalorisation:
+                return EvaluateRevalorisation(asset, modelLabel, model);
+
+            default:
+                return null;
+        }
+    }
+
+    private EvaluationResult? EvaluateDefectueux(HardwareAsset asset, string modelLabel, string model)
+    {
         if (IsL13G1(model))
         {
-            if (!isDefective && !isInRevalorisation)
+            return new EvaluationResult
             {
-                return null;
-            }
-
-            if (!isDefective && isInRevalorisation)
-            {
-                return new EvaluationResult
-                {
-                    Niveau = NiveauAnomalie.Erreur,
-                    RegleDeclenchee = Name,
-                    Message = "L13 G1 8 Go en Revalorisation sans être défectueux : requalifier en Disponible Re-Use.",
-                    EstBloquant = true
-                };
-            }
-
-            if (isDefective && !isInRevalorisation)
-            {
-                return new EvaluationResult
-                {
-                    Niveau = NiveauAnomalie.Erreur,
-                    RegleDeclenchee = Name,
-                    Message = "L13 G1 8 Go défectueux : doit aller en Revalorisation avec commentaire de panne.",
-                    EstBloquant = true
-                };
-            }
-
-            return null;
-        }
-
-        var isL13 = model.Contains("L13", StringComparison.OrdinalIgnoreCase);
-        var isL14 = model.Contains("L14", StringComparison.OrdinalIgnoreCase);
-
-        if (!isL13 && !isL14)
-        {
-            return null;
-        }
-
-        if (!isDefective && !isInRevalorisation && !isInRepair)
-        {
-            return null;
+                Niveau = NiveauAnomalie.Avertissement,
+                RegleDeclenchee = Name,
+                Message = "L13 G1 8 Go défectueux : à passer en Revalorisation, peu importe la date de renouvellement. Commentaire de panne obligatoire.",
+                EstBloquant = false
+            };
         }
 
         if (!asset.DateRenouvellement.HasValue)
@@ -90,64 +78,50 @@ public sealed class L13L14RenewalRule : IRule
             {
                 Niveau = NiveauAnomalie.Avertissement,
                 RegleDeclenchee = Name,
-                Message = $"{BuildModelLabel(model)} 8 Go : date de renouvellement manquante, impossible de trancher entre Revalorisation et Réparation.",
+                Message = $"{modelLabel} 8 Go défectueux : date de renouvellement absente de l'export, vérifier dans ServiceNow (2027 ou avant → Revalorisation, 2028 ou après → Réparation). Commentaire de panne obligatoire.",
                 EstBloquant = false
             };
         }
 
         var renewalYear = asset.DateRenouvellement.Value.Year;
-        var modelLabel = BuildModelLabel(model);
-
         if (renewalYear <= 2027)
         {
-            if (!isDefective && isInRevalorisation)
+            return new EvaluationResult
             {
-                return new EvaluationResult
-                {
-                    Niveau = NiveauAnomalie.Erreur,
-                    RegleDeclenchee = Name,
-                    Message = $"{modelLabel} 8 Go en Revalorisation sans être défectueux : requalifier en Disponible Re-Use.",
-                    EstBloquant = true
-                };
-            }
+                Niveau = NiveauAnomalie.Avertissement,
+                RegleDeclenchee = Name,
+                Message = $"{modelLabel} 8 Go défectueux, renouvellement {renewalYear} : à passer en Revalorisation avec commentaire de panne.",
+                EstBloquant = false
+            };
+        }
 
-            if (isDefective && !isInRevalorisation)
-            {
-                return new EvaluationResult
-                {
-                    Niveau = NiveauAnomalie.Erreur,
-                    RegleDeclenchee = Name,
-                    Message = $"{modelLabel} 8 Go défectueux avec renouvellement {renewalYear} : doit aller en Revalorisation avec commentaire de panne.",
-                    EstBloquant = true
-                };
-            }
+        return new EvaluationResult
+        {
+            Niveau = NiveauAnomalie.Avertissement,
+            RegleDeclenchee = Name,
+            Message = $"{modelLabel} 8 Go défectueux, renouvellement {renewalYear} : à renvoyer en Réparation (pas de Revalorisation). Commentaire de panne obligatoire.",
+            EstBloquant = false
+        };
+    }
 
+    private EvaluationResult? EvaluateRevalorisation(HardwareAsset asset, string modelLabel, string model)
+    {
+        // L13 G1 défectueux en Revalorisation : conforme, la justification de panne
+        // est contrôlée par les règles Revalorisation.
+        if (IsL13G1(model))
+        {
             return null;
         }
 
-        if (renewalYear >= 2028)
+        if (asset.DateRenouvellement.HasValue && asset.DateRenouvellement.Value.Year >= 2028)
         {
-            if (isInRevalorisation)
+            return new EvaluationResult
             {
-                return new EvaluationResult
-                {
-                    Niveau = NiveauAnomalie.Erreur,
-                    RegleDeclenchee = Name,
-                    Message = $"{modelLabel} 8 Go défectueux avec renouvellement {renewalYear} : doit aller en Réparation, pas en Revalorisation.",
-                    EstBloquant = true
-                };
-            }
-
-            if (isDefective && !isInRepair)
-            {
-                return new EvaluationResult
-                {
-                    Niveau = NiveauAnomalie.Erreur,
-                    RegleDeclenchee = Name,
-                    Message = $"{modelLabel} 8 Go défectueux avec renouvellement {renewalYear} : doit être classé en Réparation.",
-                    EstBloquant = true
-                };
-            }
+                Niveau = NiveauAnomalie.Erreur,
+                RegleDeclenchee = Name,
+                Message = $"{modelLabel} 8 Go en Revalorisation avec renouvellement {asset.DateRenouvellement.Value.Year} : doit partir en Réparation, pas en Revalorisation.",
+                EstBloquant = true
+            };
         }
 
         return null;
@@ -173,11 +147,6 @@ public sealed class L13L14RenewalRule : IRule
         }
 
         return L13G1Markers.Any(marker => model.Contains(marker, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static bool IsRepairSubstate(SousEtat sousEtat)
-    {
-        return sousEtat.ToString().Contains("Repar", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildModelLabel(string model)
