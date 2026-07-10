@@ -4,33 +4,61 @@ using SpiceChecker.Domain.Enums;
 namespace SpiceChecker.Domain.Rules;
 
 /// <summary>
-/// Détecte les ordinateurs Lenovo avec 16 ou 32 Go de RAM à traiter en priorité.
+/// Applique la règle prioritaire sur les Lenovo 16/32 Go :
+/// fonctionnel => Disponible Re-Use, défectueux => Réparation, jamais Revalorisation.
 /// </summary>
 public sealed class HighRamLenovoRule : IRule
 {
-    /// <inheritdoc />
     public string Name => "HighRamLenovoRule";
 
-    /// <inheritdoc />
+    public bool IsOverride => true;
+
     public EvaluationResult? Evaluate(HardwareAsset asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
 
-        var isComputer = asset.Categorie == CategorieEquipement.Ordinateur;
-        var isLenovo = asset.Fabricant.Contains("lenovo", StringComparison.OrdinalIgnoreCase);
-        var isTargetRam = asset.RamGo is 16 or 32;
-
-        if (!isComputer || !isLenovo || !isTargetRam)
+        if (!IsTargetAsset(asset))
         {
             return null;
         }
 
+        if (asset.SousEtat == SousEtat.Revalorisation)
+        {
+            return new EvaluationResult
+            {
+                Niveau = NiveauAnomalie.Erreur,
+                RegleDeclenchee = Name,
+                Message = $"Lenovo {asset.RamGo} Go : ne doit jamais être en Revalorisation, matériel stratégique à conserver.",
+                EstBloquant = true
+            };
+        }
+
+        if (asset.SousEtat == SousEtat.Defectueux)
+        {
+            return new EvaluationResult
+            {
+                Niveau = NiveauAnomalie.Erreur,
+                RegleDeclenchee = Name,
+                Message = $"Lenovo {asset.RamGo} Go défectueux : doit aller en Réparation, jamais en Revalorisation.",
+                EstBloquant = true
+            };
+        }
+
         return new EvaluationResult
         {
-            Niveau = NiveauAnomalie.Erreur,
+            Niveau = NiveauAnomalie.Info,
             RegleDeclenchee = Name,
-            Message = "Lenovo 16/32 Go détecté : à traiter en priorité (Override).",
-            EstBloquant = true
+            Message = $"Lenovo {asset.RamGo} Go conforme : à conserver en Disponible Re-Use.",
+            EstBloquant = false
         };
+    }
+
+    private static bool IsTargetAsset(HardwareAsset asset)
+    {
+        var isComputer = asset.Categorie == CategorieEquipement.Ordinateur;
+        var isLenovo = asset.Fabricant?.Contains("lenovo", StringComparison.OrdinalIgnoreCase) == true;
+        var isTargetRam = asset.RamGo is 16 or 32;
+
+        return isComputer && isLenovo && isTargetRam;
     }
 }
