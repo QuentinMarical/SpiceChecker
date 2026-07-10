@@ -29,8 +29,14 @@ public sealed class EditSubStateForm : Form
             DropDownStyle = ComboBoxStyle.DropDownList
         };
 
-        _cmbSousEtat.Items.AddRange(Enum.GetValues<SousEtat>().Cast<object>().ToArray());
-        _cmbSousEtat.SelectedItem = currentSousEtat;
+        foreach (var sousEtat in Enum.GetValues<SousEtat>())
+        {
+            _cmbSousEtat.Items.Add(new SousEtatItem(sousEtat));
+        }
+
+        _cmbSousEtat.SelectedItem = _cmbSousEtat.Items
+            .Cast<SousEtatItem>()
+            .FirstOrDefault(item => item.Valeur == currentSousEtat);
 
         var lblCommentaire = new Label { Left = 12, Top = 72, Width = 120, Text = "Commentaire" };
         _txtCommentaire = new TextBox
@@ -58,7 +64,12 @@ public sealed class EditSubStateForm : Form
         Controls.Add(btnCancel);
     }
 
-    public SousEtat ResultatSousEtat => _cmbSousEtat.SelectedItem is SousEtat value ? value : SousEtat.Autre;
+    public SousEtat ResultatSousEtat => _cmbSousEtat.SelectedItem is SousEtatItem item ? item.Valeur : SousEtat.Autre;
 
     public string ResultatCommentaire => _txtCommentaire.Text ?? string.Empty;
+
+    private sealed record SousEtatItem(SousEtat Valeur)
+    {
+        public override string ToString() => Valeur.Libelle();
+    }
 }
