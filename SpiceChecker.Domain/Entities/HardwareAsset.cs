@@ -58,6 +58,11 @@ public sealed record HardwareAsset
     public string Entrepot { get; init; } = string.Empty;
 
     /// <summary>
+    /// Emplacement physique complet (ex. "/76 - SEINE-MARITIME/ROUEN/PUCELLE 9/").
+    /// </summary>
+    public string Emplacement { get; init; } = string.Empty;
+
+    /// <summary>
     /// Sous-état métier courant de l'équipement.
     /// </summary>
     public SousEtat SousEtat { get; init; } = SousEtat.Autre;

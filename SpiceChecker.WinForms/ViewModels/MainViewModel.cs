@@ -82,6 +82,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial ObservableCollection<string> AvailableThemes { get; set; }
 
+    /// <summary>
+    /// Sites (entrepôts / emplacements) présents dans le fichier chargé.
+    /// </summary>
+    [ObservableProperty]
+    public partial ObservableCollection<string> AvailableSites { get; set; } = new();
+
     [ObservableProperty]
     public partial string SelectedTheme { get; set; } = string.Empty;
 
@@ -136,6 +142,7 @@ public partial class MainViewModel : ObservableObject
             var evaluatedAssets = await _processSpiceExportUseCase.ExecuteAsync(stream, progress, CancellationToken.None);
 
             Assets = new ObservableCollection<HardwareAsset>(evaluatedAssets);
+            RefreshAvailableSites();
             ApplyFilter();
 
             // Laisse passer les derniers rapports de progression en file d'attente
@@ -391,6 +398,26 @@ public partial class MainViewModel : ObservableObject
     {
         CurrentFilter = CurrentFilter with { SousEtat = sousEtat };
         ApplyFilter();
+    }
+
+    public void SetSite(string? site)
+    {
+        CurrentFilter = CurrentFilter with { Site = site };
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// Reconstruit la liste des sites à partir des entrepôts et emplacements du fichier chargé.
+    /// </summary>
+    private void RefreshAvailableSites()
+    {
+        var sites = Assets
+            .SelectMany(a => new[] { a.Entrepot, a.Emplacement })
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase);
+
+        AvailableSites = new ObservableCollection<string>(sites);
     }
 
     /// <summary>

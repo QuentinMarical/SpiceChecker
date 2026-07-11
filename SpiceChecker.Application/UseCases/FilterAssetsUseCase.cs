@@ -29,6 +29,7 @@ public sealed class FilterAssetsUseCase : IFilterAssetsUseCase
                 || Contains(a.Modele, search)
                 || Contains(a.Fabricant, search)
                 || Contains(a.Entrepot, search)
+                || Contains(a.Emplacement, search)
                 || Contains(a.SousEtat.Libelle(), search)
                 || Contains(a.Commentaire, search));
         }
@@ -52,6 +53,14 @@ public sealed class FilterAssetsUseCase : IFilterAssetsUseCase
         {
             var fabricant = criteria.Fabricant.Trim();
             query = query.Where(a => Contains(a.Fabricant, fabricant));
+        }
+
+        if (!string.IsNullOrWhiteSpace(criteria.Site))
+        {
+            var site = criteria.Site.Trim();
+            query = query.Where(a =>
+                string.Equals(a.Entrepot, site, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(a.Emplacement, site, StringComparison.OrdinalIgnoreCase));
         }
 
         if (criteria.AnomaliesOnly)

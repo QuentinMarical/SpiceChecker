@@ -29,7 +29,8 @@ public sealed class HardwareImportService : IHardwareImportService
         Commentaire,
         DateDerniereModifSousEtat,
         Etat,
-        Entrepot
+        Entrepot,
+        Emplacement
     }
 
     public async Task<IReadOnlyList<HardwareAsset>> ImportAsync(
@@ -110,8 +111,9 @@ public sealed class HardwareImportService : IHardwareImportService
                 DateDerniereModifSousEtat = ParseDate(rowValues, ColumnKind.DateDerniereModifSousEtat),
                 Etat = etatValue,
                 Entrepot = entrepotValue,
+                Emplacement = GetValue(rowValues, ColumnKind.Emplacement),
                 SousEtat = ParseSousEtat(sousEtatValue),
-                Commentaire = GetValue(rowValues, ColumnKind.Commentaire)
+                Commentaire = ExtractCurrentComment(GetValue(rowValues, ColumnKind.Commentaire))
             };
 
             assets.Add(asset);
@@ -212,6 +214,9 @@ public sealed class HardwareImportService : IHardwareImportService
 
         if (header.Contains("entrepot") || header.Contains("stockroom") || header.Contains("magasin") || header.Contains("warehouse") || header.Contains("depot"))
             return ColumnKind.Entrepot;
+
+        if (header.Contains("emplacement") || header.Contains("localisation") || header.Contains("location") || header == "site")
+            return ColumnKind.Emplacement;
 
         if (header.Contains("modele") || header.Contains("model") || header.Contains("designation"))
             return ColumnKind.Modele;
@@ -418,6 +423,29 @@ public sealed class HardwareImportService : IHardwareImportService
         }
 
         return etat;
+    }
+
+    /// <summary>
+    /// Ne conserve que la première ligne non vide du commentaire : le commentaire courant
+    /// est en tête de cellule, les lignes suivantes sont l'historique obsolète du poste.
+    /// </summary>
+    private static string ExtractCurrentComment(string commentaire)
+    {
+        if (string.IsNullOrWhiteSpace(commentaire))
+        {
+            return string.Empty;
+        }
+
+        foreach (var line in commentaire.Split('\n', '\r'))
+        {
+            var trimmed = line.Trim();
+            if (!string.IsNullOrWhiteSpace(trimmed))
+            {
+                return trimmed;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static SousEtat ParseSousEtat(string value)

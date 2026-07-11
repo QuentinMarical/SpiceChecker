@@ -118,4 +118,89 @@ public class HardwareImportServiceTests
         Assert.Equal("OUE-ROUEN", asset.Entrepot);
         Assert.Equal(string.Empty, asset.Commentaire);
     }
+
+    // ─── Export « rapport de dashboard » (colonnes enrichies, tout site) ────
+
+    private static readonly string[] DashboardHeaders =
+    {
+        "Etiquette", "Centre de coûts", "État", "Sous-état", "Entrepôt", "Emplacement",
+        "Catégorie de modèle", "Modèle", "Commentaires", "Date de renouvellement de matériel", "Date dernier sous état"
+    };
+
+    private static async Task<IReadOnlyList<HardwareAsset>> ImportDashboardAsync(params object[][] rows)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Page 1");
+
+        for (var c = 0; c < DashboardHeaders.Length; c++)
+        {
+            ws.Cell(1, c + 1).Value = DashboardHeaders[c];
+        }
+
+        for (var r = 0; r < rows.Length; r++)
+        {
+            for (var c = 0; c < rows[r].Length; c++)
+            {
+                var value = rows[r][c];
+                ws.Cell(r + 2, c + 1).Value = value switch
+                {
+                    DateTime date => date,
+                    _ => XLCellValue.FromObject(value)
+                };
+            }
+        }
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        stream.Position = 0;
+
+        var service = new HardwareImportService();
+        return await service.ImportAsync(stream);
+    }
+
+    private static object[] DashboardRow(string sousEtat, string emplacement, string commentaire) =>
+    [
+        "SCR0000001", "DR NORMANDIE", "En stock", sousEtat, "OUE-CAEN", emplacement,
+        "Ordinateur", "LENOVO THINKPAD_L13 G1 I5 8", commentaire, new DateTime(2026, 9, 30), new DateTime(2026, 6, 1)
+    ];
+
+    [Fact]
+    public async Task SeuleLaPremiereLigneDuCommentaire_EstConservee()
+    {
+        // Les lignes suivantes du commentaire sont l'historique obsolète du poste.
+        var assets = await ImportDashboardAsync(DashboardRow(
+            "Défectueux",
+            "/14 - CALVADOS/CAEN/FORT/",
+            "QMA 10/07/2026 : PC HS ne s'allume plus\nKFL - 11/06/2021 : Récupération du poste\nRAS installation 2019"));
+
+        var asset = Assert.Single(assets);
+        Assert.Equal("QMA 10/07/2026 : PC HS ne s'allume plus", asset.Commentaire);
+    }
+
+    [Fact]
+    public async Task PremiereLigneVide_LeCommentairePrendLaPremiereLigneNonVide()
+    {
+        var assets = await ImportDashboardAsync(DashboardRow(
+            "Défectueux",
+            "/14 - CALVADOS/CAEN/FORT/",
+            "\n  \nQMA 10/07/2026 : écran fissuré en bas"));
+
+        var asset = Assert.Single(assets);
+        Assert.Equal("QMA 10/07/2026 : écran fissuré en bas", asset.Commentaire);
+    }
+
+    [Fact]
+    public async Task LEmplacementEtLaDateDeRenouvellement_SontImportes_PourNimporteQuelSite()
+    {
+        var assets = await ImportDashboardAsync(DashboardRow(
+            "Disponible Re-Use",
+            "/14 - CALVADOS/CAEN/FORT/",
+            "RAS poste contrôlé"));
+
+        var asset = Assert.Single(assets);
+        Assert.Equal("/14 - CALVADOS/CAEN/FORT/", asset.Emplacement);
+        Assert.Equal("OUE-CAEN", asset.Entrepot);
+        Assert.Equal(new DateTime(2026, 9, 30), asset.DateRenouvellement);
+        Assert.Equal(new DateTime(2026, 6, 1), asset.DateDerniereModifSousEtat);
+    }
 }

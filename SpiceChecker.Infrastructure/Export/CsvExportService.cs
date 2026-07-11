@@ -17,7 +17,7 @@ public sealed class CsvExportService : IExportService
         ArgumentNullException.ThrowIfNull(assets);
 
         await using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true), leaveOpen: true);
-        await writer.WriteLineAsync("Etiquette,Categorie,Fabricant,Modele,RamGo,SousEtat,Entrepot,DateRenouvellement,Commentaire,NiveauAnomalie,MessageAnomalie");
+        await writer.WriteLineAsync("Etiquette,Categorie,Fabricant,Modele,RamGo,SousEtat,Entrepot,Emplacement,DateRenouvellement,Commentaire,NiveauAnomalie,MessageAnomalie");
 
         foreach (var asset in assets)
         {
@@ -33,6 +33,7 @@ public sealed class CsvExportService : IExportService
                 Escape(asset.RamGo?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                 Escape(asset.SousEtat.Libelle()),
                 Escape(asset.Entrepot),
+                Escape(asset.Emplacement),
                 Escape(asset.DateRenouvellement?.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture) ?? string.Empty),
                 Escape(asset.Commentaire),
                 Escape(evaluation?.Niveau.ToString() ?? string.Empty),

@@ -25,6 +25,7 @@ public partial class MainForm : Form
     private TextBox _txtSearch = null!;
     private ComboBox _cmbCategorie = null!;
     private ComboBox _cmbSousEtat = null!;
+    private ComboBox _cmbSite = null!;
     private ComboBox _cmbResultat = null!;
     private ComboBox _cmbTheme = null!;
 
@@ -111,23 +112,26 @@ public partial class MainForm : Form
         var filterPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 46,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            MinimumSize = new Size(0, 46),
             Padding = new Padding(10, 6, 10, 4),
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false
+            WrapContents = true
         };
 
         _txtSearch = new TextBox
         {
             Name = "txtSearch",
-            Width = 240,
-            PlaceholderText = "Rechercher (étiquette, modèle, sous-état…)",
+            Width = 210,
+            PlaceholderText = "Rechercher (étiquette, modèle, site…)",
             Margin = new Padding(0, 4, 12, 0)
         };
 
-        _cmbCategorie = CreateFilterCombo("cmbCategorie", 150);
-        _cmbSousEtat = CreateFilterCombo("cmbSousEtat", 210);
-        _cmbResultat = CreateFilterCombo("cmbResultat", 180);
+        _cmbCategorie = CreateFilterCombo("cmbCategorie", 130);
+        _cmbSousEtat = CreateFilterCombo("cmbSousEtat", 185);
+        _cmbSite = CreateFilterCombo("cmbSite", 145);
+        _cmbResultat = CreateFilterCombo("cmbResultat", 165);
 
         _btnResetFilters = new Button
         {
@@ -145,6 +149,8 @@ public partial class MainForm : Form
         filterPanel.Controls.Add(_cmbCategorie);
         filterPanel.Controls.Add(CreateFilterLabel("Sous-état"));
         filterPanel.Controls.Add(_cmbSousEtat);
+        filterPanel.Controls.Add(CreateFilterLabel("Site"));
+        filterPanel.Controls.Add(_cmbSite);
         filterPanel.Controls.Add(CreateFilterLabel("Résultat"));
         filterPanel.Controls.Add(_cmbResultat);
         filterPanel.Controls.Add(_btnResetFilters);
@@ -292,6 +298,8 @@ public partial class MainForm : Form
 
         _cmbSousEtat.SelectedIndex = 0;
 
+        PopulateSiteCombo();
+
         _cmbResultat.Items.AddRange(
         [
             "(tous les résultats)",
@@ -344,6 +352,12 @@ public partial class MainForm : Form
         {
             var value = _cmbSousEtat.SelectedItem is SousEtatItem item ? item.Valeur : (SousEtat?)null;
             _viewModel.SetSousEtat(value);
+        };
+
+        _cmbSite.SelectedIndexChanged += (_, _) =>
+        {
+            var value = _cmbSite.SelectedIndex > 0 ? _cmbSite.SelectedItem as string : null;
+            _viewModel.SetSite(value);
         };
 
         _cmbResultat.SelectedIndexChanged += (_, _) =>
@@ -436,9 +450,28 @@ public partial class MainForm : Form
         _txtSearch.Clear();
         _cmbCategorie.SelectedIndex = 0;
         _cmbSousEtat.SelectedIndex = 0;
+        _cmbSite.SelectedIndex = 0;
         _cmbResultat.SelectedIndex = 0;
         _viewModel.ResetFilters();
         UpdateSortGlyphs();
+    }
+
+    private void PopulateSiteCombo()
+    {
+        var previousSelection = _cmbSite.SelectedIndex > 0 ? _cmbSite.SelectedItem as string : null;
+
+        _cmbSite.BeginUpdate();
+        _cmbSite.Items.Clear();
+        _cmbSite.Items.Add("(tous)");
+        foreach (var site in _viewModel.AvailableSites)
+        {
+            _cmbSite.Items.Add(site);
+        }
+
+        _cmbSite.SelectedIndex = previousSelection is not null && _cmbSite.Items.Contains(previousSelection)
+            ? _cmbSite.Items.IndexOf(previousSelection)
+            : 0;
+        _cmbSite.EndUpdate();
     }
 
     private static void OnFileDragEnter(object? sender, DragEventArgs e)
@@ -555,6 +588,10 @@ public partial class MainForm : Form
                 _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
                 break;
 
+            case nameof(MainViewModel.AvailableSites):
+                PopulateSiteCombo();
+                break;
+
             case nameof(MainViewModel.StatusMessage):
                 _statusLabel.Text = _viewModel.StatusMessage;
                 break;
@@ -659,6 +696,7 @@ public partial class MainForm : Form
         {
             SetColumn(nameof(HardwareAsset.DateAcquisition), visible: false);
             SetColumn(nameof(HardwareAsset.Etat), visible: false);
+            SetColumn(nameof(HardwareAsset.Emplacement), visible: false);
 
             var displayIndex = 0;
             SetColumn(nameof(HardwareAsset.AssetTag), "Étiquette", 95, ref displayIndex);
@@ -811,6 +849,11 @@ public partial class MainForm : Form
             $"{asset.AssetTag} — {asset.Fabricant} {asset.Modele}",
             $"Sous-état : {asset.SousEtat.Libelle()}"
         };
+
+        if (!string.IsNullOrWhiteSpace(asset.Emplacement))
+        {
+            lines.Add($"Emplacement : {asset.Emplacement}");
+        }
 
         if (asset.Evaluation is { } evaluation)
         {

@@ -25,7 +25,7 @@ public sealed class XlsxExportService : IExportService
 
             var headers = new[]
             {
-                "Étiquette", "Catégorie", "Fabricant", "Modèle", "RAM (Go)", "Sous-état", "Entrepôt", "Renouvellement", "Commentaire", "Niveau", "Résultat d'analyse"
+                "Étiquette", "Catégorie", "Fabricant", "Modèle", "RAM (Go)", "Sous-état", "Entrepôt", "Emplacement", "Renouvellement", "Commentaire", "Niveau", "Résultat d'analyse"
             };
 
             for (var i = 0; i < headers.Length; i++)
@@ -53,12 +53,13 @@ public sealed class XlsxExportService : IExportService
                 worksheet.Cell(excelRow, 5).Value = asset.RamGo;
                 worksheet.Cell(excelRow, 6).Value = asset.SousEtat.Libelle();
                 worksheet.Cell(excelRow, 7).Value = asset.Entrepot;
-                worksheet.Cell(excelRow, 8).Value = asset.DateRenouvellement?.ToString("dd/MM/yyyy") ?? string.Empty;
-                worksheet.Cell(excelRow, 9).Value = asset.Commentaire;
-                worksheet.Cell(excelRow, 10).Value = evaluation?.Niveau.ToString() ?? string.Empty;
-                worksheet.Cell(excelRow, 11).Value = evaluation?.Message ?? string.Empty;
+                worksheet.Cell(excelRow, 8).Value = asset.Emplacement;
+                worksheet.Cell(excelRow, 9).Value = asset.DateRenouvellement?.ToString("dd/MM/yyyy") ?? string.Empty;
+                worksheet.Cell(excelRow, 10).Value = asset.Commentaire;
+                worksheet.Cell(excelRow, 11).Value = evaluation?.Niveau.ToString() ?? string.Empty;
+                worksheet.Cell(excelRow, 12).Value = evaluation?.Message ?? string.Empty;
 
-                ApplySeverityColor(worksheet.Cell(excelRow, 10), evaluation?.Niveau);
+                ApplySeverityColor(worksheet.Cell(excelRow, 11), evaluation?.Niveau);
             }
 
             worksheet.Columns().AdjustToContents();

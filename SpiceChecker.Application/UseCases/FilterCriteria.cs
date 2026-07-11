@@ -11,5 +11,6 @@ public sealed record FilterCriteria(
     SousEtat? SousEtat = null,
     NiveauAnomalie? NiveauMin = null,
     string? Fabricant = null,
+    string? Site = null,
     bool AnomaliesOnly = false,
     bool ConformesOnly = false);
