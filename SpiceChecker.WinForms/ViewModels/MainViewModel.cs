@@ -51,12 +51,6 @@ public partial class MainViewModel : ObservableObject
         FilteredAssets = new();
         CurrentFilter = new();
         StatusMessage = "Prêt";
-
-        var themes = _themeService.GetAvailableThemes() ?? [];
-        AvailableThemes = new ObservableCollection<string>(themes);
-        SelectedTheme = string.IsNullOrWhiteSpace(_themeService.CurrentTheme)
-            ? "Fluent11"
-            : _themeService.CurrentTheme;
     }
 
     [ObservableProperty]
@@ -79,17 +73,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial FilterCriteria CurrentFilter { get; set; }
 
-    [ObservableProperty]
-    public partial ObservableCollection<string> AvailableThemes { get; set; }
-
     /// <summary>
     /// Sites (entrepôts / emplacements) présents dans le fichier chargé.
     /// </summary>
     [ObservableProperty]
     public partial ObservableCollection<string> AvailableSites { get; set; } = new();
-
-    [ObservableProperty]
-    public partial string SelectedTheme { get; set; } = string.Empty;
 
     [RelayCommand]
     private async Task LoadFileAsync()
@@ -315,32 +303,10 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = $"{assetsToCopy.Count} lignes copiées dans le presse-papier.";
     }
 
-    [RelayCommand]
-    private async Task ChangeThemeAsync()
+    public Task InitializeAsync()
     {
-        if (string.IsNullOrWhiteSpace(SelectedTheme))
-        {
-            return;
-        }
-
-        _themeService.ApplyTheme(SelectedTheme);
-        await _settingsService.SaveSettingAsync("Theme", SelectedTheme);
-        StatusMessage = $"Thème appliqué : {SelectedTheme}.";
-    }
-
-    public async Task InitializeAsync()
-    {
-        var savedTheme = await _settingsService.GetSettingAsync("Theme", "Fluent11");
-        if (!string.IsNullOrWhiteSpace(savedTheme) && AvailableThemes.Contains(savedTheme))
-        {
-            SelectedTheme = savedTheme;
-        }
-        else
-        {
-            SelectedTheme = "Fluent11";
-        }
-
-        await ChangeThemeAsync();
+        _themeService.ApplyTheme(_themeService.CurrentTheme);
+        return Task.CompletedTask;
     }
 
     private async Task ExecuteExportAsync(bool exportCsv)

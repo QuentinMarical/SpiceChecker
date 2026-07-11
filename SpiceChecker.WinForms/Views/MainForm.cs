@@ -22,12 +22,13 @@ public partial class MainForm : Form
     private Button _btnCopy = null!;
     private Button _btnResetFilters = null!;
     private DataGridView _grid = null!;
+    private const string CheckColumnName = "colCocher";
+
     private TextBox _txtSearch = null!;
     private ComboBox _cmbCategorie = null!;
     private ComboBox _cmbSousEtat = null!;
     private ComboBox _cmbSite = null!;
     private ComboBox _cmbResultat = null!;
-    private ComboBox _cmbTheme = null!;
 
     private StatusStrip _statusStrip = null!;
     private ToolStripStatusLabel _statusLabel = null!;
@@ -85,28 +86,7 @@ public partial class MainForm : Form
         toolbarLeft.Controls.Add(_btnExportExcel);
         toolbarLeft.Controls.Add(_btnCopy);
 
-        var toolbarRight = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Right,
-            AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false
-        };
-
-        var lblTheme = new Label { Text = "Thème", AutoSize = true, Margin = new Padding(0, 9, 6, 0) };
-        _cmbTheme = new ComboBox
-        {
-            Name = "cmbTheme",
-            Width = 130,
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Margin = new Padding(0, 5, 0, 0)
-        };
-
-        toolbarRight.Controls.Add(lblTheme);
-        toolbarRight.Controls.Add(_cmbTheme);
-
         toolbarPanel.Controls.Add(toolbarLeft);
-        toolbarPanel.Controls.Add(toolbarRight);
 
         // ── Barre de filtres ────────────────────────────────────────────────
         var filterPanel = new FlowLayoutPanel
@@ -159,13 +139,14 @@ public partial class MainForm : Form
         _grid = new DataGridView
         {
             Dock = DockStyle.Fill,
-            ReadOnly = true,
+            // ReadOnly géré colonne par colonne : seule la colonne à cocher est éditable.
+            ReadOnly = false,
             AutoGenerateColumns = true,
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
             AllowUserToResizeRows = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-            MultiSelect = false,
+            MultiSelect = true,
             RowHeadersVisible = false,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
             BorderStyle = BorderStyle.None,
@@ -197,9 +178,11 @@ public partial class MainForm : Form
         _grid.CellToolTipTextNeeded += OnGridCellToolTipTextNeeded;
         _grid.ColumnHeaderMouseClick += OnGridColumnHeaderMouseClick;
         _grid.CellDoubleClick += OnGridCellDoubleClick;
+        _grid.CurrentCellDirtyStateChanged += OnGridCurrentCellDirtyStateChanged;
 
         _gridMenu.Items.Add("✏  Modifier le sous-état", null, OnEditSubStateMenuClick);
-        _gridMenu.Items.Add("📋  Copier la ligne", null, OnCopyRowMenuClick);
+        _gridMenu.Items.Add("🏷  Copier les étiquettes", null, OnCopyTagsMenuClick);
+        _gridMenu.Items.Add("📋  Copier les lignes", null, OnCopyRowsMenuClick);
         _gridMenu.Items.Add(new ToolStripSeparator());
         _gridMenu.Items.Add("📄  Copier tout le tableau filtré", null, (_, _) => _viewModel.CopySelectionToClipboardCommand.Execute(null));
         _grid.ContextMenuStrip = _gridMenu;
@@ -310,12 +293,6 @@ public partial class MainForm : Form
         ]);
         _cmbResultat.SelectedIndex = 0;
 
-        _cmbTheme.DataSource = _viewModel.AvailableThemes;
-        if (!string.IsNullOrWhiteSpace(_viewModel.SelectedTheme))
-        {
-            _cmbTheme.SelectedItem = _viewModel.SelectedTheme;
-        }
-
         _btnLoad.Enabled = !_viewModel.IsLoading;
         _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
     }
@@ -382,16 +359,6 @@ public partial class MainForm : Form
             }
         };
 
-        _cmbTheme.SelectedIndexChanged += async (_, _) =>
-        {
-            if (_cmbTheme.SelectedItem is string theme)
-            {
-                _viewModel.SelectedTheme = theme;
-                await _viewModel.ChangeThemeCommand.ExecuteAsync(null);
-                _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
-            }
-        };
-
         DragEnter += OnFileDragEnter;
         DragDrop += OnFileDragDrop;
         _grid.DragEnter += OnFileDragEnter;
@@ -402,7 +369,6 @@ public partial class MainForm : Form
             TryConfigureGridColumns();
 
             await _viewModel.InitializeAsync();
-            _cmbTheme.SelectedItem = _viewModel.SelectedTheme;
             _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
 
             TryConfigureGridColumns();
@@ -507,9 +473,18 @@ public partial class MainForm : Form
 
     private async void OnGridCellDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
-        if (e.RowIndex >= 0)
+        if (e.RowIndex >= 0 && e.ColumnIndex >= 0 && _grid.Columns[e.ColumnIndex].Name != CheckColumnName)
         {
             await EditCurrentRowAsync();
+        }
+    }
+
+    private void OnGridCurrentCellDirtyStateChanged(object? sender, EventArgs e)
+    {
+        // Valide immédiatement le clic sur une case à cocher.
+        if (_grid.IsCurrentCellDirty && _grid.CurrentCell is DataGridViewCheckBoxCell)
+        {
+            _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
         }
     }
 
@@ -523,34 +498,93 @@ public partial class MainForm : Form
         await _viewModel.EditSelectedAssetCommand.ExecuteAsync(asset);
     }
 
-    private void OnCopyRowMenuClick(object? sender, EventArgs e)
+    /// <summary>
+    /// Lignes visées par les actions de copie : les lignes cochées si au moins
+    /// une case l'est, sinon les lignes sélectionnées (Ctrl/Maj + clic).
+    /// </summary>
+    private List<HardwareAsset> GetTargetAssets()
     {
-        if (_grid.CurrentRow?.DataBoundItem is not HardwareAsset asset)
+        var checkedAssets = new List<HardwareAsset>();
+        foreach (DataGridViewRow row in _grid.Rows)
         {
+            if (row.Cells[CheckColumnName].Value is true && row.DataBoundItem is HardwareAsset asset)
+            {
+                checkedAssets.Add(asset);
+            }
+        }
+
+        if (checkedAssets.Count > 0)
+        {
+            return checkedAssets;
+        }
+
+        var selectedAssets = new List<HardwareAsset>();
+        foreach (DataGridViewRow row in _grid.SelectedRows)
+        {
+            if (row.DataBoundItem is HardwareAsset asset)
+            {
+                selectedAssets.Add(asset);
+            }
+        }
+
+        selectedAssets.Reverse();
+        return selectedAssets;
+    }
+
+    private void OnCopyTagsMenuClick(object? sender, EventArgs e)
+    {
+        var assets = GetTargetAssets();
+        if (assets.Count == 0)
+        {
+            _statusLabel.Text = "Aucune ligne cochée ou sélectionnée.";
             return;
         }
 
-        var evaluation = asset.Evaluation is null
-            ? "Conforme"
-            : $"{asset.Evaluation.Niveau} — {asset.Evaluation.Message}";
+        Clipboard.SetText(string.Join(Environment.NewLine, assets.Select(a => a.AssetTag)));
+        _statusLabel.Text = $"{assets.Count} étiquette(s) copiée(s) dans le presse-papier.";
+    }
 
-        Clipboard.SetText(string.Join('\t',
-            asset.AssetTag,
-            asset.Categorie.Libelle(),
-            asset.Fabricant,
-            asset.Modele,
-            asset.RamGo?.ToString() ?? string.Empty,
-            asset.SousEtat.Libelle(),
-            asset.Entrepot,
-            evaluation));
+    private void OnCopyRowsMenuClick(object? sender, EventArgs e)
+    {
+        var assets = GetTargetAssets();
+        if (assets.Count == 0)
+        {
+            _statusLabel.Text = "Aucune ligne cochée ou sélectionnée.";
+            return;
+        }
 
-        _statusLabel.Text = $"Ligne {asset.AssetTag} copiée dans le presse-papier.";
+        var lines = assets.Select(asset =>
+        {
+            var evaluation = asset.Evaluation is null
+                ? "Conforme"
+                : $"{asset.Evaluation.Niveau} — {asset.Evaluation.Message}";
+
+            return string.Join('\t',
+                asset.AssetTag,
+                asset.Categorie.Libelle(),
+                asset.Fabricant,
+                asset.Modele,
+                asset.RamGo?.ToString() ?? string.Empty,
+                asset.SousEtat.Libelle(),
+                asset.Entrepot,
+                evaluation);
+        });
+
+        Clipboard.SetText(string.Join(Environment.NewLine, lines));
+        _statusLabel.Text = $"{assets.Count} ligne(s) copiée(s) dans le presse-papier.";
     }
 
     private void OnGridColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (e.ColumnIndex < 0)
         {
+            return;
+        }
+
+        // Clic sur l'en-tête de la colonne à cocher : tout cocher / tout décocher.
+        if (_grid.Columns[e.ColumnIndex].Name == CheckColumnName)
+        {
+            ToggleAllCheckBoxes();
             return;
         }
 
@@ -561,6 +595,29 @@ public partial class MainForm : Form
         }
 
         _viewModel.ToggleSort(propertyName);
+    }
+
+    private void ToggleAllCheckBoxes()
+    {
+        var anyUnchecked = false;
+        foreach (DataGridViewRow row in _grid.Rows)
+        {
+            if (row.Cells[CheckColumnName].Value is not true)
+            {
+                anyUnchecked = true;
+                break;
+            }
+        }
+
+        _grid.EndEdit();
+        foreach (DataGridViewRow row in _grid.Rows)
+        {
+            row.Cells[CheckColumnName].Value = anyUnchecked;
+        }
+
+        _statusLabel.Text = anyUnchecked
+            ? $"{_grid.Rows.Count} ligne(s) cochée(s)."
+            : "Toutes les cases décochées.";
     }
 
     private void UpdateSortGlyphs()
@@ -694,11 +751,13 @@ public partial class MainForm : Form
 
         try
         {
+            EnsureCheckColumn();
+
             SetColumn(nameof(HardwareAsset.DateAcquisition), visible: false);
             SetColumn(nameof(HardwareAsset.Etat), visible: false);
             SetColumn(nameof(HardwareAsset.Emplacement), visible: false);
 
-            var displayIndex = 0;
+            var displayIndex = 1;
             SetColumn(nameof(HardwareAsset.AssetTag), "Étiquette", 95, ref displayIndex);
             SetColumn(nameof(HardwareAsset.Categorie), "Catégorie", 95, ref displayIndex);
             SetColumn(nameof(HardwareAsset.Fabricant), "Fabricant", 80, ref displayIndex);
@@ -722,6 +781,12 @@ public partial class MainForm : Form
                 evaluationColumn.MinimumWidth = 220;
             }
 
+            // Seule la colonne à cocher est éditable.
+            foreach (DataGridViewColumn column in _grid.Columns)
+            {
+                column.ReadOnly = column.Name != CheckColumnName;
+            }
+
             UpdateSortGlyphs();
 
             _gridColumnsConfigured = true;
@@ -732,6 +797,32 @@ public partial class MainForm : Form
             _grid.ResumeLayout();
             _isConfiguringGridColumns = false;
         }
+    }
+
+    private void EnsureCheckColumn()
+    {
+        if (_grid.Columns[CheckColumnName] is { } existing)
+        {
+            existing.DisplayIndex = 0;
+            return;
+        }
+
+        var checkColumn = new DataGridViewCheckBoxColumn
+        {
+            Name = CheckColumnName,
+            HeaderText = "☑",
+            Width = 36,
+            MinimumWidth = 36,
+            Resizable = DataGridViewTriState.False,
+            SortMode = DataGridViewColumnSortMode.NotSortable,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
+            FalseValue = false,
+            TrueValue = true
+        };
+        checkColumn.HeaderCell.ToolTipText = "Cocher des lignes puis clic droit pour copier les étiquettes ou les lignes. Clic sur l'en-tête : tout cocher/décocher.";
+
+        _grid.Columns.Insert(0, checkColumn);
+        checkColumn.DisplayIndex = 0;
     }
 
     private void SetColumn(string name, bool visible)
