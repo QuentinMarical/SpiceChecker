@@ -27,6 +27,10 @@ public partial class MainForm : Form
     private CheckBox _chkAnomaliesOnly = null!;
     private ComboBox _cmbTheme = null!;
 
+    private bool _isConfiguringGridColumns;
+    private bool _gridColumnsConfigured;
+    private bool _pendingGridColumnConfiguration;
+
     public MainForm(MainViewModel viewModel)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
@@ -166,7 +170,8 @@ public partial class MainForm : Form
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
             Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
         };
-        _grid.DataBindingComplete += (_, _) => ConfigureGridColumns();
+
+        _grid.DataBindingComplete += OnGridDataBindingComplete;
         _grid.CellFormatting += OnGridCellFormatting;
 
         _gridMenu.Items.Add("Modifier le sous-état", null, OnEditSubStateMenuClick);
@@ -253,6 +258,7 @@ public partial class MainForm : Form
         };
 
         _btnAppliquerFiltre.Click += (_, _) => _viewModel.ApplyFilterCommand.Execute(null);
+
         _cmbTheme.SelectedIndexChanged += async (_, _) =>
         {
             if (_cmbTheme.SelectedItem is string theme)
@@ -265,9 +271,13 @@ public partial class MainForm : Form
 
         Shown += async (_, _) =>
         {
+            TryConfigureGridColumns();
+
             await _viewModel.InitializeAsync();
             _cmbTheme.SelectedItem = _viewModel.SelectedTheme;
             _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
+
+            TryConfigureGridColumns();
         };
 
         _viewModel.PropertyChanged += ViewModelOnPropertyChanged;
@@ -298,8 +308,42 @@ public partial class MainForm : Form
 
     private void RefreshBinding()
     {
+        _gridColumnsConfigured = false;
+        _pendingGridColumnConfiguration = true;
         _bindingSource.DataSource = _viewModel.FilteredAssets;
         _bindingSource.ResetBindings(false);
+        TryConfigureGridColumns();
+    }
+
+    private void OnGridDataBindingComplete(object? sender, DataGridViewBindingCompleteEventArgs e)
+    {
+        _pendingGridColumnConfiguration = true;
+        TryConfigureGridColumns();
+    }
+
+    private void TryConfigureGridColumns()
+    {
+        if (_isConfiguringGridColumns || _gridColumnsConfigured || _grid.IsDisposed)
+        {
+            return;
+        }
+
+        if (_grid.Columns.Count == 0)
+        {
+            return;
+        }
+
+        if (!_pendingGridColumnConfiguration)
+        {
+            return;
+        }
+
+        if (!IsHandleCreated || !Visible)
+        {
+            return;
+        }
+
+        ConfigureGridColumns();
     }
 
     private void ConfigureGridColumns()
@@ -309,33 +353,45 @@ public partial class MainForm : Form
             return;
         }
 
-        // Colonnes techniques masquées.
-        SetColumn(nameof(HardwareAsset.DateAcquisition), visible: false);
-        SetColumn(nameof(HardwareAsset.Etat), visible: false);
+        _isConfiguringGridColumns = true;
+        _grid.SuspendLayout();
 
-        // Colonnes visibles : libellé, largeur et ordre d'affichage.
-        var displayIndex = 0;
-        SetColumn(nameof(HardwareAsset.AssetTag), "Étiquette", 100, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.Categorie), "Catégorie", 110, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.Fabricant), "Fabricant", 85, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.Modele), "Modèle", 220, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.RamGo), "RAM (Go)", 65, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.SousEtat), "Sous-état", 140, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.Entrepot), "Entrepôt", 90, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.DateRenouvellement), "Renouvellement", 100, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.DateDerniereModifSousEtat), "Sous-état depuis (j)", 105, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.Commentaire), "Commentaire", 140, ref displayIndex);
-        SetColumn(nameof(HardwareAsset.Evaluation), "Résultat d'analyse", 320, ref displayIndex);
-
-        if (_grid.Columns[nameof(HardwareAsset.DateRenouvellement)] is { } dateRenouvellementColumn)
+        try
         {
-            dateRenouvellementColumn.DefaultCellStyle.Format = "dd/MM/yyyy";
+            SetColumn(nameof(HardwareAsset.DateAcquisition), visible: false);
+            SetColumn(nameof(HardwareAsset.Etat), visible: false);
+
+            var displayIndex = 0;
+            SetColumn(nameof(HardwareAsset.AssetTag), "Étiquette", 100, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Categorie), "Catégorie", 110, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Fabricant), "Fabricant", 85, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Modele), "Modèle", 220, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.RamGo), "RAM (Go)", 65, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.SousEtat), "Sous-état", 140, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Entrepot), "Entrepôt", 90, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.DateRenouvellement), "Renouvellement", 100, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.DateDerniereModifSousEtat), "Sous-état depuis (j)", 105, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Commentaire), "Commentaire", 140, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Evaluation), "Résultat d'analyse", 320, ref displayIndex);
+
+            if (_grid.Columns[nameof(HardwareAsset.DateRenouvellement)] is { } dateRenouvellementColumn)
+            {
+                dateRenouvellementColumn.DefaultCellStyle.Format = "dd/MM/yyyy";
+            }
+
+            if (_grid.Columns[nameof(HardwareAsset.Evaluation)] is { } evaluationColumn)
+            {
+                evaluationColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                evaluationColumn.MinimumWidth = 260;
+            }
+
+            _gridColumnsConfigured = true;
+            _pendingGridColumnConfiguration = false;
         }
-
-        if (_grid.Columns[nameof(HardwareAsset.Evaluation)] is { } evaluationColumn)
+        finally
         {
-            evaluationColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            evaluationColumn.MinimumWidth = 260;
+            _grid.ResumeLayout();
+            _isConfiguringGridColumns = false;
         }
     }
 
@@ -354,20 +410,21 @@ public partial class MainForm : Form
             return;
         }
 
+        column.Visible = true;
+        column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
         column.HeaderText = headerText;
-        column.Width = width;
         column.DisplayIndex = displayIndex;
+        column.Width = width;
         displayIndex++;
     }
 
     private static void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        if (sender is not DataGridView grid || e.RowIndex < 0)
+        if (sender is not DataGridView grid || e.RowIndex < 0 || e.ColumnIndex < 0)
         {
             return;
         }
 
-        // Teinte de fond de toute la ligne selon la sévérité de l'anomalie.
         if (grid.Rows[e.RowIndex].DataBoundItem is HardwareAsset rowAsset)
         {
             var backColor = rowAsset.Evaluation?.Niveau switch
