@@ -38,6 +38,16 @@ public sealed class FilterAssetsUseCase : IFilterAssetsUseCase
             query = query.Where(a => a.Categorie == criteria.Categorie.Value);
         }
 
+        if (criteria.SousEtat.HasValue)
+        {
+            query = query.Where(a => a.SousEtat == criteria.SousEtat.Value);
+        }
+
+        if (criteria.ConformesOnly)
+        {
+            query = query.Where(a => a.Evaluation is null);
+        }
+
         if (!string.IsNullOrWhiteSpace(criteria.Fabricant))
         {
             var fabricant = criteria.Fabricant.Trim();

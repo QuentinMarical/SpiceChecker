@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Reflection;
 using SpiceChecker.Domain.Entities;
 using SpiceChecker.Domain.Enums;
 using SpiceChecker.WinForms.ViewModels;
@@ -6,7 +7,8 @@ using SpiceChecker.WinForms.ViewModels;
 namespace SpiceChecker.WinForms.Views;
 
 /// <summary>
-/// Vue minimale WinForms pilotée par le MainViewModel.
+/// Vue principale WinForms pilotée par le MainViewModel :
+/// barre d'outils, filtres, tableau de résultats triable et barre de statut avec compteurs.
 /// </summary>
 public partial class MainForm : Form
 {
@@ -18,22 +20,32 @@ public partial class MainForm : Form
     private Button _btnExportCsv = null!;
     private Button _btnExportExcel = null!;
     private Button _btnCopy = null!;
-    private Button _btnAppliquerFiltre = null!;
+    private Button _btnResetFilters = null!;
     private DataGridView _grid = null!;
-    private ProgressBar _progressBar = null!;
-    private Label _lblStatus = null!;
     private TextBox _txtSearch = null!;
     private ComboBox _cmbCategorie = null!;
-    private CheckBox _chkAnomaliesOnly = null!;
+    private ComboBox _cmbSousEtat = null!;
+    private ComboBox _cmbResultat = null!;
     private ComboBox _cmbTheme = null!;
+
+    private StatusStrip _statusStrip = null!;
+    private ToolStripStatusLabel _statusLabel = null!;
+    private ToolStripProgressBar _statusProgress = null!;
+    private ToolStripStatusLabel _lblErreurs = null!;
+    private ToolStripStatusLabel _lblAvertissements = null!;
+    private ToolStripStatusLabel _lblInfos = null!;
+    private ToolStripStatusLabel _lblConformes = null!;
+    private ToolStripStatusLabel _lblAffiches = null!;
 
     private bool _isConfiguringGridColumns;
     private bool _gridColumnsConfigured;
     private bool _pendingGridColumnConfiguration;
+    private readonly string? _startupFilePath;
 
-    public MainForm(MainViewModel viewModel)
+    public MainForm(MainViewModel viewModel, string? startupFilePath = null)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _startupFilePath = startupFilePath;
 
         InitializeComponent();
         SetupBindings();
@@ -42,157 +54,223 @@ public partial class MainForm : Form
 
     private void InitializeComponent()
     {
-        Text = "SpiceChecker v2";
-        Width = 1200;
-        Height = 760;
+        Text = "SpiceChecker";
+        Width = 1280;
+        Height = 800;
+        MinimumSize = new Size(1000, 620);
         StartPosition = FormStartPosition.CenterScreen;
+        Font = new Font("Segoe UI", 9.5f);
+        KeyPreview = true;
+        AllowDrop = true;
 
-        _btnLoad = new Button
+        // ── Barre d'outils ──────────────────────────────────────────────────
+        var toolbarPanel = new Panel { Dock = DockStyle.Top, Height = 52, Padding = new Padding(10, 10, 10, 4) };
+
+        var toolbarLeft = new FlowLayoutPanel
         {
-            Name = "btnLoad",
-            Text = "Charger",
-            Left = 12,
-            Top = 12,
-            Width = 100,
-            Height = 30
+            Dock = DockStyle.Left,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
         };
 
-        _progressBar = new ProgressBar
+        _btnLoad = CreateToolbarButton("📂  Charger un export", 170, primary: true);
+        _btnExportCsv = CreateToolbarButton("📄  Exporter CSV", 140);
+        _btnExportExcel = CreateToolbarButton("📊  Exporter Excel", 145);
+        _btnCopy = CreateToolbarButton("📋  Copier le tableau", 160);
+
+        toolbarLeft.Controls.Add(_btnLoad);
+        toolbarLeft.Controls.Add(_btnExportCsv);
+        toolbarLeft.Controls.Add(_btnExportExcel);
+        toolbarLeft.Controls.Add(_btnCopy);
+
+        var toolbarRight = new FlowLayoutPanel
         {
-            Left = 130,
-            Top = 17,
-            Width = 280,
-            Height = 20,
-            Minimum = 0,
-            Maximum = 100
+            Dock = DockStyle.Right,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
         };
 
-        _lblStatus = new Label
-        {
-            Left = 430,
-            Top = 20,
-            Width = 730,
-            Height = 20,
-            AutoEllipsis = true,
-            Text = "Prêt"
-        };
-
-        var lblSearch = new Label { Left = 12, Top = 58, Width = 70, Text = "Recherche" };
-        _txtSearch = new TextBox { Name = "txtSearch", Left = 82, Top = 54, Width = 260 };
-
-        var lblCategorie = new Label { Left = 356, Top = 58, Width = 70, Text = "Catégorie" };
-        _cmbCategorie = new ComboBox
-        {
-            Name = "cmbCategorie",
-            Left = 426,
-            Top = 54,
-            Width = 190,
-            DropDownStyle = ComboBoxStyle.DropDownList
-        };
-
-        _btnExportCsv = new Button
-        {
-            Name = "btnExportCsv",
-            Text = "Exporter CSV",
-            Left = 880,
-            Top = 12,
-            Width = 110,
-            Height = 30,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
-        };
-
-        _btnExportExcel = new Button
-        {
-            Name = "btnExportExcel",
-            Text = "Exporter Excel",
-            Left = 996,
-            Top = 12,
-            Width = 120,
-            Height = 30,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
-        };
-
-        _btnCopy = new Button
-        {
-            Name = "btnCopy",
-            Text = "Copier",
-            Left = 996,
-            Top = 52,
-            Width = 120,
-            Height = 26,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
-        };
-
-        _chkAnomaliesOnly = new CheckBox
-        {
-            Name = "chkAnomaliesOnly",
-            Left = 632,
-            Top = 57,
-            Width = 135,
-            Height = 22,
-            Text = "Anomalies seules"
-        };
-
-        var lblTheme = new Label { Left = 776, Top = 58, Width = 52, Text = "Thème" };
+        var lblTheme = new Label { Text = "Thème", AutoSize = true, Margin = new Padding(0, 9, 6, 0) };
         _cmbTheme = new ComboBox
         {
             Name = "cmbTheme",
-            Left = 828,
-            Top = 54,
-            Width = 140,
-            DropDownStyle = ComboBoxStyle.DropDownList
+            Width = 130,
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Margin = new Padding(0, 5, 0, 0)
         };
 
-        _btnAppliquerFiltre = new Button
+        toolbarRight.Controls.Add(lblTheme);
+        toolbarRight.Controls.Add(_cmbTheme);
+
+        toolbarPanel.Controls.Add(toolbarLeft);
+        toolbarPanel.Controls.Add(toolbarRight);
+
+        // ── Barre de filtres ────────────────────────────────────────────────
+        var filterPanel = new FlowLayoutPanel
         {
-            Name = "btnAppliquerFiltre",
-            Text = "Appliquer",
-            Left = 880,
-            Top = 52,
-            Width = 90,
-            Height = 26,
-            Visible = false
+            Dock = DockStyle.Top,
+            Height = 46,
+            Padding = new Padding(10, 6, 10, 4),
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
         };
 
+        _txtSearch = new TextBox
+        {
+            Name = "txtSearch",
+            Width = 240,
+            PlaceholderText = "Rechercher (étiquette, modèle, sous-état…)",
+            Margin = new Padding(0, 4, 12, 0)
+        };
+
+        _cmbCategorie = CreateFilterCombo("cmbCategorie", 150);
+        _cmbSousEtat = CreateFilterCombo("cmbSousEtat", 210);
+        _cmbResultat = CreateFilterCombo("cmbResultat", 180);
+
+        _btnResetFilters = new Button
+        {
+            Name = "btnResetFilters",
+            Text = "♻  Réinitialiser",
+            Width = 125,
+            Height = 28,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 3, 0, 0)
+        };
+
+        filterPanel.Controls.Add(CreateFilterLabel("Recherche"));
+        filterPanel.Controls.Add(_txtSearch);
+        filterPanel.Controls.Add(CreateFilterLabel("Catégorie"));
+        filterPanel.Controls.Add(_cmbCategorie);
+        filterPanel.Controls.Add(CreateFilterLabel("Sous-état"));
+        filterPanel.Controls.Add(_cmbSousEtat);
+        filterPanel.Controls.Add(CreateFilterLabel("Résultat"));
+        filterPanel.Controls.Add(_cmbResultat);
+        filterPanel.Controls.Add(_btnResetFilters);
+
+        // ── Tableau de résultats ────────────────────────────────────────────
         _grid = new DataGridView
         {
-            Left = 12,
-            Top = 90,
-            Width = 1160,
-            Height = 620,
+            Dock = DockStyle.Fill,
             ReadOnly = true,
             AutoGenerateColumns = true,
             AllowUserToAddRows = false,
             AllowUserToDeleteRows = false,
+            AllowUserToResizeRows = false,
             SelectionMode = DataGridViewSelectionMode.FullRowSelect,
             MultiSelect = false,
             RowHeadersVisible = false,
             AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            BorderStyle = BorderStyle.None,
+            BackgroundColor = Color.White,
+            GridColor = Color.FromArgb(230, 230, 230),
+            CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+            ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single,
+            EnableHeadersVisualStyles = false,
+            ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
+            ColumnHeadersHeight = 34,
+            ShowCellToolTips = true,
+            AllowDrop = true
         };
+
+        _grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(243, 243, 243);
+        _grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(26, 26, 26);
+        _grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 9.5f);
+        _grid.ColumnHeadersDefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
+        _grid.DefaultCellStyle.Font = new Font("Segoe UI", 9f);
+        _grid.DefaultCellStyle.Padding = new Padding(6, 0, 6, 0);
+        _grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(204, 228, 247);
+        _grid.DefaultCellStyle.SelectionForeColor = Color.Black;
+        _grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(250, 250, 250);
+        _grid.RowTemplate.Height = 28;
+        EnableGridDoubleBuffering(_grid);
 
         _grid.DataBindingComplete += OnGridDataBindingComplete;
         _grid.CellFormatting += OnGridCellFormatting;
+        _grid.CellToolTipTextNeeded += OnGridCellToolTipTextNeeded;
+        _grid.ColumnHeaderMouseClick += OnGridColumnHeaderMouseClick;
+        _grid.CellDoubleClick += OnGridCellDoubleClick;
 
-        _gridMenu.Items.Add("Modifier le sous-état", null, OnEditSubStateMenuClick);
-        _gridMenu.Items.Add("Copier", null, (_, _) => _viewModel.CopySelectionToClipboardCommand.Execute(null));
+        _gridMenu.Items.Add("✏  Modifier le sous-état", null, OnEditSubStateMenuClick);
+        _gridMenu.Items.Add("📋  Copier la ligne", null, OnCopyRowMenuClick);
+        _gridMenu.Items.Add(new ToolStripSeparator());
+        _gridMenu.Items.Add("📄  Copier tout le tableau filtré", null, (_, _) => _viewModel.CopySelectionToClipboardCommand.Execute(null));
         _grid.ContextMenuStrip = _gridMenu;
 
-        Controls.Add(_btnLoad);
-        Controls.Add(_btnExportCsv);
-        Controls.Add(_btnExportExcel);
-        Controls.Add(_btnCopy);
-        Controls.Add(_progressBar);
-        Controls.Add(_lblStatus);
-        Controls.Add(lblSearch);
-        Controls.Add(_txtSearch);
-        Controls.Add(lblCategorie);
-        Controls.Add(_cmbCategorie);
-        Controls.Add(_chkAnomaliesOnly);
-        Controls.Add(lblTheme);
-        Controls.Add(_cmbTheme);
-        Controls.Add(_btnAppliquerFiltre);
+        // ── Barre de statut ─────────────────────────────────────────────────
+        _statusStrip = new StatusStrip { SizingGrip = false, Padding = new Padding(10, 3, 10, 3) };
+
+        _statusLabel = new ToolStripStatusLabel("Prêt — glissez-déposez un export SPICE (.xlsx) ou utilisez Ctrl+O.")
+        {
+            Spring = true,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        _statusProgress = new ToolStripProgressBar { Width = 160, Minimum = 0, Maximum = 100, Visible = false };
+
+        _lblErreurs = CreateCounterLabel(Color.Firebrick);
+        _lblAvertissements = CreateCounterLabel(Color.DarkOrange);
+        _lblInfos = CreateCounterLabel(Color.SteelBlue);
+        _lblConformes = CreateCounterLabel(Color.SeaGreen);
+        _lblAffiches = new ToolStripStatusLabel { Font = new Font("Segoe UI", 9f) };
+
+        _statusStrip.Items.Add(_statusLabel);
+        _statusStrip.Items.Add(_statusProgress);
+        _statusStrip.Items.Add(_lblErreurs);
+        _statusStrip.Items.Add(_lblAvertissements);
+        _statusStrip.Items.Add(_lblInfos);
+        _statusStrip.Items.Add(_lblConformes);
+        _statusStrip.Items.Add(new ToolStripSeparator());
+        _statusStrip.Items.Add(_lblAffiches);
+
+        // L'ordre d'ajout définit le layout : Fill d'abord, puis les panneaux dockés.
         Controls.Add(_grid);
+        Controls.Add(filterPanel);
+        Controls.Add(toolbarPanel);
+        Controls.Add(_statusStrip);
+
+        UpdateCounters();
+    }
+
+    private static Button CreateToolbarButton(string text, int width, bool primary = false) => new()
+    {
+        Text = text,
+        Width = width,
+        Height = 32,
+        Cursor = Cursors.Hand,
+        Margin = new Padding(0, 0, 8, 0),
+        TextAlign = ContentAlignment.MiddleCenter,
+        Tag = primary ? "primary" : null
+    };
+
+    private static Label CreateFilterLabel(string text) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        Margin = new Padding(0, 8, 6, 0)
+    };
+
+    private static ComboBox CreateFilterCombo(string name, int width) => new()
+    {
+        Name = name,
+        Width = width,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+        Margin = new Padding(0, 4, 12, 0)
+    };
+
+    private static ToolStripStatusLabel CreateCounterLabel(Color color) => new()
+    {
+        ForeColor = color,
+        Font = new Font("Segoe UI Semibold", 9f),
+        Margin = new Padding(8, 3, 0, 2)
+    };
+
+    private static void EnableGridDoubleBuffering(DataGridView grid)
+    {
+        typeof(DataGridView)
+            .GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?
+            .SetValue(grid, true);
     }
 
     private void SetupBindings()
@@ -200,14 +278,29 @@ public partial class MainForm : Form
         _bindingSource.DataSource = _viewModel.FilteredAssets;
         _grid.DataSource = _bindingSource;
 
-        _lblStatus.DataBindings.Add(nameof(Label.Text), _viewModel, nameof(MainViewModel.StatusMessage), false, DataSourceUpdateMode.OnPropertyChanged);
-        _progressBar.DataBindings.Add(nameof(ProgressBar.Value), _viewModel, nameof(MainViewModel.ProgressPercentage), false, DataSourceUpdateMode.OnPropertyChanged);
-
         _cmbCategorie.Items.Add("(toutes)");
-        _cmbCategorie.Items.Add(CategorieEquipement.Ordinateur);
-        _cmbCategorie.Items.Add(CategorieEquipement.EquipementReseau);
-        _cmbCategorie.Items.Add(CategorieEquipement.Serveur);
+        _cmbCategorie.Items.Add(new CategorieItem(CategorieEquipement.Ordinateur));
+        _cmbCategorie.Items.Add(new CategorieItem(CategorieEquipement.EquipementReseau));
+        _cmbCategorie.Items.Add(new CategorieItem(CategorieEquipement.Serveur));
         _cmbCategorie.SelectedIndex = 0;
+
+        _cmbSousEtat.Items.Add("(tous)");
+        foreach (var sousEtat in Enum.GetValues<SousEtat>())
+        {
+            _cmbSousEtat.Items.Add(new SousEtatItem(sousEtat));
+        }
+
+        _cmbSousEtat.SelectedIndex = 0;
+
+        _cmbResultat.Items.AddRange(
+        [
+            "(tous les résultats)",
+            "Anomalies seulement",
+            "Erreurs seulement",
+            "Avertissements et plus",
+            "Conformes seulement"
+        ]);
+        _cmbResultat.SelectedIndex = 0;
 
         _cmbTheme.DataSource = _viewModel.AvailableThemes;
         if (!string.IsNullOrWhiteSpace(_viewModel.SelectedTheme))
@@ -237,27 +330,43 @@ public partial class MainForm : Form
         _btnExportCsv.Click += async (_, _) => await _viewModel.ExportCsvCommand.ExecuteAsync(null);
         _btnExportExcel.Click += async (_, _) => await _viewModel.ExportXlsxCommand.ExecuteAsync(null);
         _btnCopy.Click += (_, _) => _viewModel.CopySelectionToClipboardCommand.Execute(null);
+        _btnResetFilters.Click += (_, _) => ResetFilters();
 
-        _txtSearch.TextChanged += (_, _) =>
-        {
-            _viewModel.SetSearchText(_txtSearch.Text);
-            _viewModel.ApplyFilterCommand.Execute(null);
-        };
+        _txtSearch.TextChanged += (_, _) => _viewModel.SetSearchText(_txtSearch.Text);
 
         _cmbCategorie.SelectedIndexChanged += (_, _) =>
         {
-            var value = _cmbCategorie.SelectedItem is CategorieEquipement c ? c : (CategorieEquipement?)null;
+            var value = _cmbCategorie.SelectedItem is CategorieItem item ? item.Valeur : (CategorieEquipement?)null;
             _viewModel.SetCategorie(value);
-            _viewModel.ApplyFilterCommand.Execute(null);
         };
 
-        _chkAnomaliesOnly.CheckedChanged += (_, _) =>
+        _cmbSousEtat.SelectedIndexChanged += (_, _) =>
         {
-            _viewModel.SetAnomaliesOnly(_chkAnomaliesOnly.Checked);
-            _viewModel.ApplyFilterCommand.Execute(null);
+            var value = _cmbSousEtat.SelectedItem is SousEtatItem item ? item.Valeur : (SousEtat?)null;
+            _viewModel.SetSousEtat(value);
         };
 
-        _btnAppliquerFiltre.Click += (_, _) => _viewModel.ApplyFilterCommand.Execute(null);
+        _cmbResultat.SelectedIndexChanged += (_, _) =>
+        {
+            switch (_cmbResultat.SelectedIndex)
+            {
+                case 1:
+                    _viewModel.SetResultat(anomaliesOnly: true, niveauMin: null, conformesOnly: false);
+                    break;
+                case 2:
+                    _viewModel.SetResultat(anomaliesOnly: false, niveauMin: NiveauAnomalie.Erreur, conformesOnly: false);
+                    break;
+                case 3:
+                    _viewModel.SetResultat(anomaliesOnly: false, niveauMin: NiveauAnomalie.Avertissement, conformesOnly: false);
+                    break;
+                case 4:
+                    _viewModel.SetResultat(anomaliesOnly: false, niveauMin: null, conformesOnly: true);
+                    break;
+                default:
+                    _viewModel.SetResultat(anomaliesOnly: false, niveauMin: null, conformesOnly: false);
+                    break;
+            }
+        };
 
         _cmbTheme.SelectedIndexChanged += async (_, _) =>
         {
@@ -269,6 +378,11 @@ public partial class MainForm : Form
             }
         };
 
+        DragEnter += OnFileDragEnter;
+        DragDrop += OnFileDragDrop;
+        _grid.DragEnter += OnFileDragEnter;
+        _grid.DragDrop += OnFileDragDrop;
+
         Shown += async (_, _) =>
         {
             TryConfigureGridColumns();
@@ -278,12 +392,95 @@ public partial class MainForm : Form
             _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
 
             TryConfigureGridColumns();
+
+            if (_startupFilePath is not null)
+            {
+                await _viewModel.LoadFromPathAsync(_startupFilePath);
+            }
         };
 
         _viewModel.PropertyChanged += ViewModelOnPropertyChanged;
     }
 
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        switch (keyData)
+        {
+            case Keys.Control | Keys.O:
+                _ = _viewModel.LoadFileCommand.ExecuteAsync(null);
+                return true;
+
+            case Keys.Control | Keys.S:
+                _ = _viewModel.ExportCsvCommand.ExecuteAsync(null);
+                return true;
+
+            case Keys.Control | Keys.E:
+                _ = _viewModel.ExportXlsxCommand.ExecuteAsync(null);
+                return true;
+
+            case Keys.Control | Keys.F:
+                _txtSearch.Focus();
+                _txtSearch.SelectAll();
+                return true;
+
+            case Keys.F5:
+                _viewModel.ApplyFilterCommand.Execute(null);
+                return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    private void ResetFilters()
+    {
+        _txtSearch.Clear();
+        _cmbCategorie.SelectedIndex = 0;
+        _cmbSousEtat.SelectedIndex = 0;
+        _cmbResultat.SelectedIndex = 0;
+        _viewModel.ResetFilters();
+        UpdateSortGlyphs();
+    }
+
+    private static void OnFileDragEnter(object? sender, DragEventArgs e)
+    {
+        e.Effect = TryGetDroppedXlsx(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    private async void OnFileDragDrop(object? sender, DragEventArgs e)
+    {
+        var path = TryGetDroppedXlsx(e);
+        if (path is not null)
+        {
+            await _viewModel.LoadFromPathAsync(path);
+        }
+    }
+
+    private static string? TryGetDroppedXlsx(DragEventArgs e)
+    {
+        if (e.Data?.GetData(DataFormats.FileDrop) is string[] files
+            && files.Length > 0
+            && files[0].EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            return files[0];
+        }
+
+        return null;
+    }
+
     private async void OnEditSubStateMenuClick(object? sender, EventArgs e)
+    {
+        await EditCurrentRowAsync();
+    }
+
+    private async void OnGridCellDoubleClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex >= 0)
+        {
+            await EditCurrentRowAsync();
+        }
+    }
+
+    private async Task EditCurrentRowAsync()
     {
         if (_grid.CurrentRow?.DataBoundItem is not HardwareAsset asset)
         {
@@ -293,17 +490,119 @@ public partial class MainForm : Form
         await _viewModel.EditSelectedAssetCommand.ExecuteAsync(asset);
     }
 
+    private void OnCopyRowMenuClick(object? sender, EventArgs e)
+    {
+        if (_grid.CurrentRow?.DataBoundItem is not HardwareAsset asset)
+        {
+            return;
+        }
+
+        var evaluation = asset.Evaluation is null
+            ? "Conforme"
+            : $"{asset.Evaluation.Niveau} — {asset.Evaluation.Message}";
+
+        Clipboard.SetText(string.Join('\t',
+            asset.AssetTag,
+            asset.Categorie.Libelle(),
+            asset.Fabricant,
+            asset.Modele,
+            asset.RamGo?.ToString() ?? string.Empty,
+            asset.SousEtat.Libelle(),
+            asset.Entrepot,
+            evaluation));
+
+        _statusLabel.Text = $"Ligne {asset.AssetTag} copiée dans le presse-papier.";
+    }
+
+    private void OnGridColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.ColumnIndex < 0)
+        {
+            return;
+        }
+
+        var propertyName = _grid.Columns[e.ColumnIndex].DataPropertyName;
+        if (string.IsNullOrEmpty(propertyName))
+        {
+            return;
+        }
+
+        _viewModel.ToggleSort(propertyName);
+    }
+
+    private void UpdateSortGlyphs()
+    {
+        foreach (DataGridViewColumn column in _grid.Columns)
+        {
+            column.HeaderCell.SortGlyphDirection =
+                column.DataPropertyName == _viewModel.SortProperty
+                    ? (_viewModel.SortDescending ? SortOrder.Descending : SortOrder.Ascending)
+                    : SortOrder.None;
+        }
+    }
+
     private void ViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.FilteredAssets))
+        switch (e.PropertyName)
         {
-            RefreshBinding();
-            _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
+            case nameof(MainViewModel.FilteredAssets):
+                RefreshBinding();
+                UpdateCounters();
+                _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
+                break;
+
+            case nameof(MainViewModel.CanCopySelection):
+                _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
+                break;
+
+            case nameof(MainViewModel.StatusMessage):
+                _statusLabel.Text = _viewModel.StatusMessage;
+                break;
+
+            case nameof(MainViewModel.ProgressPercentage):
+                _statusProgress.Value = Math.Clamp(_viewModel.ProgressPercentage, 0, 100);
+                break;
+
+            case nameof(MainViewModel.IsLoading):
+                _statusProgress.Visible = _viewModel.IsLoading;
+                _btnLoad.Enabled = !_viewModel.IsLoading;
+                break;
         }
-        else if (e.PropertyName == nameof(MainViewModel.CanCopySelection))
+    }
+
+    private void UpdateCounters()
+    {
+        var assets = _viewModel.FilteredAssets;
+        var erreurs = 0;
+        var avertissements = 0;
+        var infos = 0;
+        var conformes = 0;
+
+        foreach (var asset in assets)
         {
-            _btnCopy.Enabled = _viewModel.CopySelectionToClipboardCommand.CanExecute(null);
+            switch (asset.Evaluation?.Niveau)
+            {
+                case NiveauAnomalie.Bloquant:
+                case NiveauAnomalie.Erreur:
+                    erreurs++;
+                    break;
+                case NiveauAnomalie.Avertissement:
+                    avertissements++;
+                    break;
+                case NiveauAnomalie.Info:
+                    infos++;
+                    break;
+                default:
+                    conformes++;
+                    break;
+            }
         }
+
+        _lblErreurs.Text = $"🔴 {erreurs}";
+        _lblAvertissements.Text = $"🟠 {avertissements}";
+        _lblInfos.Text = $"🔵 {infos}";
+        _lblConformes.Text = $"✔ {conformes}";
+        _lblAffiches.Text = $"{assets.Count} affiché(s) / {_viewModel.Assets.Count} au total";
     }
 
     private void RefreshBinding()
@@ -362,16 +661,16 @@ public partial class MainForm : Form
             SetColumn(nameof(HardwareAsset.Etat), visible: false);
 
             var displayIndex = 0;
-            SetColumn(nameof(HardwareAsset.AssetTag), "Étiquette", 100, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.Categorie), "Catégorie", 110, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.Fabricant), "Fabricant", 85, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.Modele), "Modèle", 220, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.RamGo), "RAM (Go)", 65, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.SousEtat), "Sous-état", 140, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.Entrepot), "Entrepôt", 90, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.DateRenouvellement), "Renouvellement", 100, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.DateDerniereModifSousEtat), "Sous-état depuis (j)", 105, ref displayIndex);
-            SetColumn(nameof(HardwareAsset.Commentaire), "Commentaire", 140, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.AssetTag), "Étiquette", 95, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Categorie), "Catégorie", 95, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Fabricant), "Fabricant", 80, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Modele), "Modèle", 195, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.RamGo), "RAM", 50, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.SousEtat), "Sous-état", 125, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Entrepot), "Entrepôt", 85, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.DateRenouvellement), "Renouvel.", 85, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.DateDerniereModifSousEtat), "Depuis (j)", 70, ref displayIndex);
+            SetColumn(nameof(HardwareAsset.Commentaire), "Commentaire", 110, ref displayIndex);
             SetColumn(nameof(HardwareAsset.Evaluation), "Résultat d'analyse", 320, ref displayIndex);
 
             if (_grid.Columns[nameof(HardwareAsset.DateRenouvellement)] is { } dateRenouvellementColumn)
@@ -382,8 +681,10 @@ public partial class MainForm : Form
             if (_grid.Columns[nameof(HardwareAsset.Evaluation)] is { } evaluationColumn)
             {
                 evaluationColumn.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-                evaluationColumn.MinimumWidth = 260;
+                evaluationColumn.MinimumWidth = 220;
             }
+
+            UpdateSortGlyphs();
 
             _gridColumnsConfigured = true;
             _pendingGridColumnConfiguration = false;
@@ -412,6 +713,7 @@ public partial class MainForm : Form
 
         column.Visible = true;
         column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+        column.SortMode = DataGridViewColumnSortMode.Programmatic;
         column.HeaderText = headerText;
         column.DisplayIndex = displayIndex;
         column.Width = width;
@@ -495,6 +797,50 @@ public partial class MainForm : Form
                 e.FormattingApplied = true;
                 break;
         }
+    }
+
+    private void OnGridCellToolTipTextNeeded(object? sender, DataGridViewCellToolTipTextNeededEventArgs e)
+    {
+        if (e.RowIndex < 0 || _grid.Rows[e.RowIndex].DataBoundItem is not HardwareAsset asset)
+        {
+            return;
+        }
+
+        var lines = new List<string>
+        {
+            $"{asset.AssetTag} — {asset.Fabricant} {asset.Modele}",
+            $"Sous-état : {asset.SousEtat.Libelle()}"
+        };
+
+        if (asset.Evaluation is { } evaluation)
+        {
+            lines.Add($"Règle : {evaluation.RegleDeclenchee} ({evaluation.Niveau})");
+            lines.Add(evaluation.Message);
+        }
+        else
+        {
+            lines.Add("Aucune anomalie détectée.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(asset.Commentaire))
+        {
+            lines.Add($"Commentaire : {asset.Commentaire}");
+        }
+
+        lines.Add(string.Empty);
+        lines.Add("Double-clic : modifier le sous-état");
+
+        e.ToolTipText = string.Join(Environment.NewLine, lines);
+    }
+
+    private sealed record SousEtatItem(SousEtat Valeur)
+    {
+        public override string ToString() => Valeur.Libelle();
+    }
+
+    private sealed record CategorieItem(CategorieEquipement Valeur)
+    {
+        public override string ToString() => Valeur.Libelle();
     }
 
     protected override void Dispose(bool disposing)

@@ -8,6 +8,8 @@ namespace SpiceChecker.Application.UseCases;
 public sealed record FilterCriteria(
     string? SearchText = null,
     CategorieEquipement? Categorie = null,
+    SousEtat? SousEtat = null,
     NiveauAnomalie? NiveauMin = null,
     string? Fabricant = null,
-    bool AnomaliesOnly = false);
+    bool AnomaliesOnly = false,
+    bool ConformesOnly = false);

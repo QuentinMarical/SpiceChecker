@@ -93,20 +93,36 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        Stream? stream = null;
+        StatusMessage = "Sélection du fichier...";
+        var stream = await _filePickerService.PickFileAsync();
+        if (stream is null)
+        {
+            StatusMessage = "Chargement annulé.";
+            return;
+        }
 
+        await ImportStreamAsync(stream);
+    }
+
+    /// <summary>
+    /// Charge un export SPICE depuis un chemin (glisser-déposer d'un fichier .xlsx).
+    /// </summary>
+    public async Task LoadFromPathAsync(string path)
+    {
+        if (IsLoading || string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        await ImportStreamAsync(File.OpenRead(path));
+    }
+
+    private async Task ImportStreamAsync(Stream stream)
+    {
         try
         {
             IsLoading = true;
             ProgressPercentage = 0;
-            StatusMessage = "Sélection du fichier...";
-
-            stream = await _filePickerService.PickFileAsync();
-            if (stream is null)
-            {
-                StatusMessage = "Chargement annulé.";
-                return;
-            }
 
             var progress = new Progress<string>(message =>
             {
@@ -122,6 +138,10 @@ public partial class MainViewModel : ObservableObject
             Assets = new ObservableCollection<HardwareAsset>(evaluatedAssets);
             ApplyFilter();
 
+            // Laisse passer les derniers rapports de progression en file d'attente
+            // avant d'afficher le message final (sinon ils l'écrasent).
+            await Task.Yield();
+
             ProgressPercentage = 100;
             StatusMessage = $"Chargement terminé ({Assets.Count} éléments).";
         }
@@ -135,23 +155,93 @@ public partial class MainViewModel : ObservableObject
         }
         finally
         {
-            if (stream is not null)
-            {
-                await stream.DisposeAsync();
-            }
-
+            await stream.DisposeAsync();
             IsLoading = false;
         }
+    }
+
+    /// <summary>
+    /// Propriété de tri courante (nom de propriété de <see cref="HardwareAsset"/>), ou null.
+    /// </summary>
+    public string? SortProperty { get; private set; }
+
+    /// <summary>
+    /// Sens du tri courant.
+    /// </summary>
+    public bool SortDescending { get; private set; }
+
+    /// <summary>
+    /// Bascule le tri sur la propriété donnée : croissant, puis décroissant, puis aucun.
+    /// </summary>
+    public void ToggleSort(string propertyName)
+    {
+        if (SortProperty == propertyName)
+        {
+            if (SortDescending)
+            {
+                SortProperty = null;
+                SortDescending = false;
+            }
+            else
+            {
+                SortDescending = true;
+            }
+        }
+        else
+        {
+            SortProperty = propertyName;
+            SortDescending = false;
+        }
+
+        ApplyFilter();
     }
 
     [RelayCommand]
     private void ApplyFilter()
     {
-        var filtered = _filterAssetsUseCase.Execute(Assets, CurrentFilter);
+        IReadOnlyList<HardwareAsset> filtered = _filterAssetsUseCase.Execute(Assets, CurrentFilter);
+
+        if (SortProperty is not null)
+        {
+            var sorted = filtered.ToList();
+            sorted.Sort(BuildComparison(SortProperty));
+            if (SortDescending)
+            {
+                sorted.Reverse();
+            }
+
+            filtered = sorted;
+        }
+
         FilteredAssets = new ObservableCollection<HardwareAsset>(filtered);
         OnPropertyChanged(nameof(CanCopySelection));
         CopySelectionToClipboardCommand.NotifyCanExecuteChanged();
     }
+
+    private static Comparison<HardwareAsset> BuildComparison(string propertyName) => propertyName switch
+    {
+        nameof(HardwareAsset.AssetTag) => (a, b) => string.Compare(a.AssetTag, b.AssetTag, StringComparison.OrdinalIgnoreCase),
+        nameof(HardwareAsset.Categorie) => (a, b) => string.Compare(a.Categorie.Libelle(), b.Categorie.Libelle(), StringComparison.OrdinalIgnoreCase),
+        nameof(HardwareAsset.Fabricant) => (a, b) => string.Compare(a.Fabricant, b.Fabricant, StringComparison.OrdinalIgnoreCase),
+        nameof(HardwareAsset.Modele) => (a, b) => string.Compare(a.Modele, b.Modele, StringComparison.OrdinalIgnoreCase),
+        nameof(HardwareAsset.RamGo) => (a, b) => Nullable.Compare(a.RamGo, b.RamGo),
+        nameof(HardwareAsset.SousEtat) => (a, b) => string.Compare(a.SousEtat.Libelle(), b.SousEtat.Libelle(), StringComparison.OrdinalIgnoreCase),
+        nameof(HardwareAsset.Entrepot) => (a, b) => string.Compare(a.Entrepot, b.Entrepot, StringComparison.OrdinalIgnoreCase),
+        nameof(HardwareAsset.DateRenouvellement) => (a, b) => Nullable.Compare(a.DateRenouvellement, b.DateRenouvellement),
+        nameof(HardwareAsset.DateDerniereModifSousEtat) => (a, b) => Nullable.Compare(a.DateDerniereModifSousEtat, b.DateDerniereModifSousEtat),
+        nameof(HardwareAsset.Commentaire) => (a, b) => string.Compare(a.Commentaire, b.Commentaire, StringComparison.OrdinalIgnoreCase),
+        nameof(HardwareAsset.Evaluation) => (a, b) => GetSeverityRankForSort(a).CompareTo(GetSeverityRankForSort(b)),
+        _ => (_, _) => 0
+    };
+
+    private static int GetSeverityRankForSort(HardwareAsset asset) => asset.Evaluation?.Niveau switch
+    {
+        NiveauAnomalie.Bloquant => 4,
+        NiveauAnomalie.Erreur => 3,
+        NiveauAnomalie.Avertissement => 2,
+        NiveauAnomalie.Info => 1,
+        _ => 0
+    };
 
     [RelayCommand]
     private async Task EditSelectedAssetAsync(HardwareAsset? asset)
@@ -294,6 +384,37 @@ public partial class MainViewModel : ObservableObject
     public void SetAnomaliesOnly(bool anomaliesOnly)
     {
         CurrentFilter = CurrentFilter with { AnomaliesOnly = anomaliesOnly };
+        ApplyFilter();
+    }
+
+    public void SetSousEtat(SousEtat? sousEtat)
+    {
+        CurrentFilter = CurrentFilter with { SousEtat = sousEtat };
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// Applique le filtre de résultat d'analyse (tous / anomalies / niveau minimal / conformes).
+    /// </summary>
+    public void SetResultat(bool anomaliesOnly, NiveauAnomalie? niveauMin, bool conformesOnly)
+    {
+        CurrentFilter = CurrentFilter with
+        {
+            AnomaliesOnly = anomaliesOnly,
+            NiveauMin = niveauMin,
+            ConformesOnly = conformesOnly
+        };
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// Réinitialise tous les critères de filtrage et le tri.
+    /// </summary>
+    public void ResetFilters()
+    {
+        CurrentFilter = new FilterCriteria();
+        SortProperty = null;
+        SortDescending = false;
         ApplyFilter();
     }
 
